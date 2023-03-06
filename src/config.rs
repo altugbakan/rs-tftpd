@@ -1,8 +1,7 @@
 use std::error::Error;
-use std::net::{AddrParseError, Ipv4Addr};
-use std::num::ParseIntError;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::{env, fmt, process};
+use std::{env, process};
 
 pub struct Config {
     pub ip_address: Ipv4Addr,
@@ -11,7 +10,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new<T>(mut args: T) -> Result<Config, ConfigError>
+    pub fn new<T>(mut args: T) -> Result<Config, Box<dyn Error>>
     where
         T: Iterator<Item = String>,
     {
@@ -66,53 +65,6 @@ impl Config {
         }
 
         Ok(config)
-    }
-}
-
-#[derive(Debug)]
-pub struct ConfigError {
-    description: String,
-}
-
-impl Error for ConfigError {
-    fn description(&self) -> &str {
-        self.description.as_str()
-    }
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.description)
-    }
-}
-
-impl From<AddrParseError> for ConfigError {
-    fn from(value: AddrParseError) -> Self {
-        ConfigError {
-            description: value.to_string(),
-        }
-    }
-}
-
-impl From<ParseIntError> for ConfigError {
-    fn from(value: ParseIntError) -> Self {
-        ConfigError {
-            description: value.to_string(),
-        }
-    }
-}
-
-impl From<String> for ConfigError {
-    fn from(value: String) -> Self {
-        ConfigError { description: value }
-    }
-}
-
-impl From<&str> for ConfigError {
-    fn from(value: &str) -> Self {
-        ConfigError {
-            description: value.to_string(),
-        }
     }
 }
 
