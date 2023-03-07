@@ -97,14 +97,14 @@ fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
     let mode: String;
     let mut zero_index: usize;
 
-    (filename, zero_index) = Convert::to_string(&buf[2..])?;
-    (mode, zero_index) = Convert::to_string(&buf[zero_index + 1..])?;
+    (filename, zero_index) = Convert::to_string(buf, 2)?;
+    (mode, zero_index) = Convert::to_string(buf, zero_index + 1)?;
 
     let mut value: String;
     let mut option;
     while zero_index < buf.len() - 1 {
-        (option, zero_index) = Convert::to_string(&buf[zero_index + 1..])?;
-        (value, zero_index) = Convert::to_string(&buf[zero_index + 1..])?;
+        (option, zero_index) = Convert::to_string(buf, zero_index + 1)?;
+        (value, zero_index) = Convert::to_string(buf, zero_index + 1)?;
         options.push(Option { option, value });
     }
 
@@ -136,6 +136,6 @@ fn parse_ack(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
 
 fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     let code = ErrorCode::from_u16(Convert::to_u16(&buf[2..])?)?;
-    let (msg, _) = Convert::to_string(&buf[4..])?;
+    let (msg, _) = Convert::to_string(buf, 4)?;
     Ok(Packet::Error { code, msg })
 }
