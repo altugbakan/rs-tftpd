@@ -5,12 +5,12 @@ pub enum Packet<'a> {
     Rrq {
         filename: String,
         mode: String,
-        options: Vec<Option>,
+        options: Vec<TransferOption>,
     },
     Wrq {
         filename: String,
         mode: String,
-        options: Vec<Option>,
+        options: Vec<TransferOption>,
     },
     Data {
         block_num: u16,
@@ -32,6 +32,7 @@ impl<'a> Packet<'a> {
             Opcode::Data => parse_data(buf),
             Opcode::Ack => parse_ack(buf),
             Opcode::Error => parse_error(buf),
+            _ => Err("invalid packet".into()),
         }
     }
 }
@@ -42,6 +43,7 @@ pub enum Opcode {
     Data = 0x0003,
     Ack = 0x0004,
     Error = 0x0005,
+    Oack = 0x0006,
 }
 
 impl Opcode {
@@ -52,14 +54,52 @@ impl Opcode {
             0x0003 => Ok(Opcode::Data),
             0x0004 => Ok(Opcode::Ack),
             0x0005 => Ok(Opcode::Error),
+            0x0006 => Ok(Opcode::Oack),
             _ => Err("invalid opcode"),
         }
     }
 }
 
-pub struct Option {
-    option: String,
-    value: String,
+pub struct TransferOption {
+    pub option: OptionType,
+    pub value: usize,
+}
+
+impl TransferOption {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        [
+            self.option.as_str().as_bytes(),
+            &[0x00],
+            self.value.to_string().as_bytes(),
+            &[0x00],
+        ]
+        .concat()
+    }
+}
+
+pub enum OptionType {
+    BlockSize,
+    TransferSize,
+    Timeout,
+}
+
+impl OptionType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            OptionType::BlockSize => "blksize",
+            OptionType::TransferSize => "tsize",
+            OptionType::Timeout => "timeout",
+        }
+    }
+
+    fn from_str(value: &str) -> Result<Self, &'static str> {
+        match value {
+            "blksize" => Ok(OptionType::BlockSize),
+            "tsize" => Ok(OptionType::TransferSize),
+            "timeout" => Ok(OptionType::Timeout),
+            _ => Err("invalid option type".into()),
+        }
+    }
 }
 
 #[repr(u16)]
@@ -105,7 +145,13 @@ fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
     while zero_index < buf.len() - 1 {
         (option, zero_index) = Convert::to_string(buf, zero_index + 1)?;
         (value, zero_index) = Convert::to_string(buf, zero_index + 1)?;
-        options.push(Option { option, value });
+
+        if let Ok(option) = OptionType::from_str(option.as_str()) {
+            options.push(TransferOption {
+                option,
+                value: value.parse()?,
+            });
+        }
     }
 
     match opcode {
@@ -138,4 +184,9 @@ fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     let code = ErrorCode::from_u16(Convert::to_u16(&buf[2..])?)?;
     let (msg, _) = Convert::to_string(buf, 4)?;
     Ok(Packet::Error { code, msg })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

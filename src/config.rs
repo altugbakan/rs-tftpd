@@ -41,7 +41,7 @@ impl Config {
                 "-d" | "--directory" => {
                     if let Some(dir_str) = args.next() {
                         if !Path::new(&dir_str).exists() {
-                            return Err(format!("{} does not exist", dir_str).into());
+                            return Err(format!("{dir_str} does not exist").into());
                         }
                         config.directory = PathBuf::from(dir_str);
                     } else {
@@ -60,7 +60,7 @@ impl Config {
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
-                invalid => return Err(format!("invalid flag: {}", invalid).into()),
+                invalid => return Err(format!("invalid flag: {invalid}").into()),
             }
         }
 

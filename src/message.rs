@@ -3,7 +3,7 @@ use std::{
     net::{SocketAddr, UdpSocket},
 };
 
-use crate::packet::{ErrorCode, Opcode, Option};
+use crate::packet::{ErrorCode, Opcode, Packet, TransferOption};
 
 pub struct Message;
 
@@ -35,23 +35,36 @@ impl Message {
     }
 
     pub fn send_error_to(socket: &UdpSocket, to: &SocketAddr, code: ErrorCode, msg: &str) {
+        eprintln!("{msg}");
         if socket.send_to(&get_error_buf(code, msg), to).is_err() {
             eprintln!("could not send an error message");
         }
     }
 
-    pub fn send_oack_to(
+    pub fn send_oack(
         socket: &UdpSocket,
-        to: &SocketAddr,
-        options: Vec<Option>,
+        options: &Vec<TransferOption>,
     ) -> Result<(), Box<dyn Error>> {
-        todo!();
+        let mut buf = vec![0x00, Opcode::Oack as u8];
 
-        let buf = [];
+        for option in options {
+            buf = [buf, option.as_bytes()].concat();
+        }
 
-        socket.send_to(&buf, to)?;
+        socket.send(&buf)?;
 
         Ok(())
+    }
+
+    pub fn receive_ack(socket: &UdpSocket) -> Result<u16, Box<dyn Error>> {
+        let mut buf = [0; 4];
+        socket.recv(&mut buf)?;
+
+        if let Ok(Packet::Ack(block)) = Packet::deserialize(&buf) {
+            Ok(block)
+        } else {
+            Err("invalid ack".into())
+        }
     }
 }
 

@@ -16,8 +16,10 @@ fn main() {
     });
 
     println!(
-        "Running TFTP Server on {}:{}",
-        config.ip_address, config.port
+        "Running TFTP Server on {}:{} in {}",
+        config.ip_address,
+        config.port,
+        config.directory.display()
     );
 
     server.listen();

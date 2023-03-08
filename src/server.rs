@@ -1,4 +1,4 @@
-use crate::packet::{ErrorCode, Packet};
+use crate::packet::{ErrorCode, Packet, TransferOption};
 use crate::{Config, Message, Worker};
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
@@ -28,104 +28,101 @@ impl Server {
             let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
             if let Ok((number_of_bytes, from)) = self.socket.recv_from(&mut buf) {
                 if let Ok(packet) = Packet::deserialize(&buf[..number_of_bytes]) {
-                    match &packet {
-                        Packet::Rrq { filename, .. } => {
-                            match self.check_file_exists(&Path::new(&filename)) {
-                                ErrorCode::FileNotFound => {
-                                    eprintln!("requested file does not exist");
-                                    Message::send_error_to(
-                                        &self.socket,
-                                        &from,
-                                        ErrorCode::FileNotFound,
-                                        "requested file does not exist",
-                                    );
-                                }
-                                ErrorCode::AccessViolation => {
-                                    eprintln!("requested file is not in the directory");
-                                    Message::send_error_to(
-                                        &self.socket,
-                                        &from,
-                                        ErrorCode::AccessViolation,
-                                        "requested file is not in the directory",
-                                    );
-                                }
-                                ErrorCode::FileExists => self
-                                    .handle_rrq(&packet, from)
-                                    .unwrap_or_else(|_| eprintln!("could not handle read request")),
-                                _ => {}
-                            }
-                        }
-                        Packet::Wrq { filename, .. } => {
-                            match self.check_file_exists(&Path::new(&filename)) {
-                                ErrorCode::FileExists => {
-                                    eprintln!("requested file already exists");
-                                    Message::send_error_to(
-                                        &self.socket,
-                                        &from,
-                                        ErrorCode::FileExists,
-                                        "requested file already exists",
-                                    );
-                                }
-                                ErrorCode::AccessViolation => {
-                                    eprintln!("requested file is not in the directory");
-                                    Message::send_error_to(
-                                        &self.socket,
-                                        &from,
-                                        ErrorCode::AccessViolation,
-                                        "requested file is not in the directory",
-                                    );
-                                }
-                                ErrorCode::FileNotFound => {
-                                    self.handle_wrq(&packet, from).unwrap_or_else(|_| {
-                                        eprintln!("could not handle write request")
-                                    })
-                                }
-                                _ => {}
-                            }
-                        }
-                        _ => {
-                            eprintln!("invalid request packet received");
-                            Message::send_error_to(
-                                &self.socket,
-                                &from,
-                                ErrorCode::IllegalOperation,
-                                "invalid request",
-                            );
-                        }
-                    }
-                };
+                    self.handle_packet(&packet, &from)
+                }
             }
         }
     }
 
-    fn handle_rrq(&self, packet: &Packet, to: SocketAddr) -> Result<(), Box<dyn Error>> {
-        if let Packet::Rrq {
-            filename,
-            mode: _,
-            options,
-        } = packet
-        {
-            let worker = Worker::new(self.socket.local_addr().unwrap(), to)?;
-            worker.send_file(Path::new(&filename), options)?;
-        } else {
-            return Err("invalid read request packet".into());
+    fn handle_packet(&self, packet: &Packet, from: &SocketAddr) {
+        match &packet {
+            Packet::Rrq {
+                filename, options, ..
+            } => self.validate_rrq(filename, options, from),
+            Packet::Wrq {
+                filename, options, ..
+            } => self.validate_wrq(filename, options, from),
+            _ => {
+                Message::send_error_to(
+                    &self.socket,
+                    from,
+                    ErrorCode::IllegalOperation,
+                    "invalid request",
+                );
+            }
         }
+    }
+
+    fn validate_rrq(&self, filename: &String, options: &Vec<TransferOption>, to: &SocketAddr) {
+        match self.check_file_exists(&Path::new(&filename)) {
+            ErrorCode::FileNotFound => {
+                Message::send_error_to(
+                    &self.socket,
+                    to,
+                    ErrorCode::FileNotFound,
+                    "requested file does not exist",
+                );
+            }
+            ErrorCode::AccessViolation => {
+                Message::send_error_to(
+                    &self.socket,
+                    to,
+                    ErrorCode::AccessViolation,
+                    "requested file is not in the directory",
+                );
+            }
+            ErrorCode::FileExists => self
+                .handle_rrq(filename, options, to)
+                .unwrap_or_else(|err| eprintln!("could not handle read request: {err}")),
+            _ => {}
+        }
+    }
+
+    fn validate_wrq(&self, filename: &String, options: &Vec<TransferOption>, to: &SocketAddr) {
+        match self.check_file_exists(&Path::new(&filename)) {
+            ErrorCode::FileExists => {
+                Message::send_error_to(
+                    &self.socket,
+                    to,
+                    ErrorCode::FileExists,
+                    "requested file already exists",
+                );
+            }
+            ErrorCode::AccessViolation => {
+                Message::send_error_to(
+                    &self.socket,
+                    to,
+                    ErrorCode::AccessViolation,
+                    "requested file is not in the directory",
+                );
+            }
+            ErrorCode::FileNotFound => self
+                .handle_wrq(filename, options, to)
+                .unwrap_or_else(|err| eprintln!("could not handle write request: {err}")),
+            _ => {}
+        };
+    }
+
+    fn handle_rrq(
+        &self,
+        filename: &String,
+        options: &Vec<TransferOption>,
+        to: &SocketAddr,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut worker = Worker::new(&self.socket.local_addr().unwrap(), to)?;
+        worker.send_file(Path::new(&filename), options)?;
 
         Ok(())
     }
 
-    fn handle_wrq(&self, packet: &Packet, to: SocketAddr) -> Result<(), Box<dyn Error>> {
-        if let Packet::Wrq {
-            filename,
-            mode: _,
-            options,
-        } = packet
-        {
-            let worker = Worker::new(self.socket.local_addr().unwrap(), to)?;
-            worker.receive_file(Path::new(&filename), options)?;
-        } else {
-            return Err("invalid write request packet".into());
-        }
+    fn handle_wrq(
+        &self,
+        filename: &String,
+        options: &Vec<TransferOption>,
+        to: &SocketAddr,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut worker = Worker::new(&self.socket.local_addr().unwrap(), to)?;
+        worker.receive_file(Path::new(&filename), options)?;
 
         Ok(())
     }
