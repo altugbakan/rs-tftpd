@@ -9,7 +9,7 @@ pub struct Message;
 
 impl Message {
     pub fn send_data(socket: &UdpSocket, data: &[u8]) -> Result<(), Box<dyn Error>> {
-        let buf = [&[0x00, Opcode::Data as u8], data].concat();
+        let buf = [&Opcode::Data.as_bytes()[..], data].concat();
 
         socket.send(&buf)?;
 
@@ -17,7 +17,7 @@ impl Message {
     }
 
     pub fn send_ack(socket: &UdpSocket, block: u16) -> Result<(), Box<dyn Error>> {
-        let buf = [&[0x00, Opcode::Ack as u8], &block.to_be_bytes()[..]].concat();
+        let buf = [Opcode::Ack.as_bytes(), block.to_be_bytes()].concat();
 
         socket.send(&buf)?;
 
@@ -45,7 +45,7 @@ impl Message {
         socket: &UdpSocket,
         options: &Vec<TransferOption>,
     ) -> Result<(), Box<dyn Error>> {
-        let mut buf = vec![0x00, Opcode::Oack as u8];
+        let mut buf = Opcode::Oack.as_bytes().to_vec();
 
         for option in options {
             buf = [buf, option.as_bytes()].concat();
@@ -70,8 +70,9 @@ impl Message {
 
 fn get_error_buf(code: ErrorCode, msg: &str) -> Vec<u8> {
     [
-        &[0x00, Opcode::Error as u8, 0x00, code as u8],
-        msg.as_bytes(),
+        &Opcode::Error.as_bytes()[..],
+        &code.as_bytes()[..],
+        &msg.as_bytes()[..],
         &[0x00],
     ]
     .concat()
