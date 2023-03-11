@@ -42,9 +42,9 @@ impl Worker {
             let mut handle_send = || -> Result<(), Box<dyn Error>> {
                 let socket = setup_socket(&addr, &remote)?;
                 let work_type = WorkType::Send(Path::new(&filename).metadata().unwrap().len());
-                let worker_options = parse_options(&mut options, &work_type)?;
-                send_oack(&socket, &options, &work_type)?;
-                send_file(&socket, &worker_options, &filename, &mut options)?;
+                accept_request(&socket, &options, &work_type)?;
+                check_response(&socket)?;
+                send_file(&socket, &filename, &mut options)?;
 
                 Ok(())
             };
@@ -65,9 +65,8 @@ impl Worker {
             let mut handle_receive = || -> Result<(), Box<dyn Error>> {
                 let socket = setup_socket(&addr, &remote)?;
                 let work_type = WorkType::Receive;
-                let worker_options = parse_options(&mut options, &work_type)?;
-                send_oack(&socket, &options, &work_type)?;
-                receive_file(&socket, &worker_options, &filename, &mut options)?;
+                accept_request(&socket, &options, &work_type)?;
+                receive_file(&socket, &filename, &mut options)?;
 
                 Ok(())
             };
@@ -81,13 +80,11 @@ impl Worker {
 
 fn send_file(
     socket: &UdpSocket,
-    worker_options: &WorkerOptions,
     filename: &String,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
     let mut file = File::open(filename).unwrap();
-
-    parse_options(options, &WorkType::Send(file.metadata().unwrap().len()))?;
+    let worker_options = parse_options(options, &WorkType::Send(file.metadata().unwrap().len()))?;
 
     let mut block_number = 1;
     loop {
@@ -96,7 +93,7 @@ fn send_file(
 
         let mut retry_cnt = 0;
         loop {
-            Message::send_data(socket, block_number, &chunk[..size])?;
+            Message::send_data(socket, block_number, chunk[..size].to_vec())?;
 
             match Message::recv(socket) {
                 Ok(Packet::Ack(received_block_number)) => {
@@ -106,12 +103,12 @@ fn send_file(
                     }
                 }
                 Ok(Packet::Error { code, msg }) => {
-                    return Err(format!("received error code {code}, with message {msg}").into());
+                    return Err(format!("Received error code {code}, with message {msg}").into());
                 }
                 _ => {
                     retry_cnt += 1;
                     if retry_cnt == MAX_RETRIES {
-                        return Err(format!("transfer timed out after {MAX_RETRIES} tries").into());
+                        return Err(format!("Transfer timed out after {MAX_RETRIES} tries").into());
                     }
                 }
             }
@@ -128,13 +125,11 @@ fn send_file(
 
 fn receive_file(
     socket: &UdpSocket,
-    worker_options: &WorkerOptions,
     filename: &String,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
     let mut file = File::create(filename).unwrap();
-
-    parse_options(options, &WorkType::Receive)?;
+    let worker_options = parse_options(options, &WorkType::Receive)?;
 
     let mut block_number: u16 = 0;
     loop {
@@ -155,13 +150,13 @@ fn receive_file(
                     }
                 }
                 Ok(Packet::Error { code, msg }) => {
-                    return Err(format!("received error code {code}: {msg}").into());
+                    return Err(format!("Received error code {code}: {msg}").into());
                 }
                 Err(err) => {
                     retry_cnt += 1;
                     if retry_cnt == MAX_RETRIES {
                         return Err(
-                            format!("transfer timed out after {MAX_RETRIES} tries: {err}").into(),
+                            format!("Transfer timed out after {MAX_RETRIES} tries: {err}").into(),
                         );
                     }
                 }
@@ -176,6 +171,34 @@ fn receive_file(
     }
 
     println!("Received {filename} from {}", socket.peer_addr().unwrap());
+    Ok(())
+}
+
+fn accept_request(
+    socket: &UdpSocket,
+    options: &Vec<TransferOption>,
+    work_type: &WorkType,
+) -> Result<(), Box<dyn Error>> {
+    if options.len() > 0 {
+        Message::send_oack(socket, options.to_vec())?;
+    } else if *work_type == WorkType::Receive {
+        Message::send_ack(socket, 0)?
+    }
+
+    Ok(())
+}
+
+fn check_response(socket: &UdpSocket) -> Result<(), Box<dyn Error>> {
+    if let Packet::Ack(received_block_number) = Message::recv(&socket)? {
+        if received_block_number != 0 {
+            Message::send_error(
+                &socket,
+                ErrorCode::IllegalOperation,
+                "invalid oack response".to_string(),
+            )?;
+        }
+    }
+
     Ok(())
 }
 
@@ -212,7 +235,7 @@ fn parse_options(
             },
             OptionType::Timeout => {
                 if *value == 0 {
-                    return Err("invalid timeout value".into());
+                    return Err("Invalid timeout value".into());
                 }
                 worker_options.timeout = *value as u64;
             }
@@ -220,23 +243,4 @@ fn parse_options(
     }
 
     Ok(worker_options)
-}
-
-fn send_oack(
-    socket: &UdpSocket,
-    options: &Vec<TransferOption>,
-    work_type: &WorkType,
-) -> Result<(), Box<dyn Error>> {
-    if options.len() > 0 {
-        Message::send_oack(socket, options)?;
-        if let Packet::Ack(received_block_number) = Message::recv(socket)? {
-            if received_block_number != 0 {
-                Message::send_error(socket, ErrorCode::IllegalOperation, "invalid oack response")?;
-            }
-        }
-    } else if *work_type == WorkType::Receive {
-        Message::send_ack(socket, 0)?
-    }
-
-    Ok(())
 }

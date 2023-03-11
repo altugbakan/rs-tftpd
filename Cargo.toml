@@ -1,9 +1,9 @@
 [package]
 name = "tftpd"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Altuğ Bakan <mail@alt.ug>"]
 edition = "2021"
-description = "TFTP Server Daemon implemented in Rust"
+description = "Multithreaded TFTP server daemon"
 repository = "https://github.com/altugbakan/rs-tftpd"
 license = "MIT"
 keywords = ["tftp", "server"]

@@ -28,14 +28,14 @@ impl Config {
                     if let Some(ip_str) = args.next() {
                         config.ip_address = ip_str.parse::<Ipv4Addr>()?;
                     } else {
-                        return Err("missing ip address after flag".into());
+                        return Err("Missing ip address after flag".into());
                     }
                 }
                 "-p" | "--port" => {
                     if let Some(port_str) = args.next() {
                         config.port = port_str.parse::<u16>()?;
                     } else {
-                        return Err("missing port number after flag".into());
+                        return Err("Missing port number after flag".into());
                     }
                 }
                 "-d" | "--directory" => {
@@ -45,7 +45,7 @@ impl Config {
                         }
                         config.directory = PathBuf::from(dir_str);
                     } else {
-                        return Err("missing directory after flag".into());
+                        return Err("Missing directory after flag".into());
                     }
                 }
                 "-h" | "--help" => {
@@ -60,7 +60,7 @@ impl Config {
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
-                invalid => return Err(format!("invalid flag: {invalid}").into()),
+                invalid => return Err(format!("Invalid flag: {invalid}").into()),
             }
         }
 

@@ -5,7 +5,7 @@ pub struct Convert;
 impl Convert {
     pub fn to_u16(buf: &[u8]) -> Result<u16, &'static str> {
         if buf.len() < 2 {
-            Err("error when converting to u16")
+            Err("Error when converting to u16")
         } else {
             Ok(((buf[0] as u16) << 8) + buf[1] as u16)
         }
@@ -17,7 +17,7 @@ impl Convert {
                 String::from_utf8(buf[start..start + index].to_vec())?,
                 index + start,
             )),
-            None => return Err("invalid string".into()),
+            None => return Err("Invalid string".into()),
         }
     }
 }

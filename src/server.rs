@@ -29,28 +29,28 @@ impl Server {
                         filename,
                         mut options,
                         ..
-                    } => match self.handle_rrq(filename.clone(), &mut options, &from) {
-                        Ok(_) => {
-                            println!("Sending {filename} to {from}");
+                    } => {
+                        println!("Sending {filename} to {from}");
+                        if let Err(err) = self.handle_rrq(filename.clone(), &mut options, &from) {
+                            eprintln!("{err}")
                         }
-                        Err(err) => eprintln!("{err}"),
-                    },
+                    }
                     Packet::Wrq {
                         filename,
                         mut options,
                         ..
-                    } => match self.handle_wrq(filename.clone(), &mut options, &from) {
-                        Ok(_) => {
-                            println!("Receiving {filename} from {from}");
+                    } => {
+                        println!("Receiving {filename} from {from}");
+                        if let Err(err) = self.handle_wrq(filename.clone(), &mut options, &from) {
+                            eprintln!("{err}")
                         }
-                        Err(err) => eprintln!("{err}"),
-                    },
+                    }
                     _ => {
                         Message::send_error_to(
                             &self.socket,
                             &from,
                             ErrorCode::IllegalOperation,
-                            "invalid request",
+                            "invalid request".to_string(),
                         )
                         .unwrap_or_else(|err| eprintln!("{err}"));
                     }
@@ -71,7 +71,7 @@ impl Server {
                     &self.socket,
                     to,
                     ErrorCode::FileNotFound,
-                    "file does not exist",
+                    "file does not exist".to_string(),
                 );
             }
             ErrorCode::AccessViolation => {
@@ -79,7 +79,7 @@ impl Server {
                     &self.socket,
                     to,
                     ErrorCode::AccessViolation,
-                    "file access violation",
+                    "file access violation".to_string(),
                 );
             }
             ErrorCode::FileExists => Worker::send(
@@ -106,7 +106,7 @@ impl Server {
                     &self.socket,
                     to,
                     ErrorCode::FileExists,
-                    "requested file already exists",
+                    "requested file already exists".to_string(),
                 );
             }
             ErrorCode::AccessViolation => {
@@ -114,7 +114,7 @@ impl Server {
                     &self.socket,
                     to,
                     ErrorCode::AccessViolation,
-                    "file access violation",
+                    "file access violation".to_string(),
                 );
             }
             ErrorCode::FileNotFound => Worker::receive(

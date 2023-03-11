@@ -21,6 +21,9 @@ pub enum Packet {
         code: ErrorCode,
         msg: String,
     },
+    Oack {
+        options: Vec<TransferOption>,
+    },
 }
 
 impl Packet {
@@ -32,7 +35,17 @@ impl Packet {
             Opcode::Data => parse_data(buf),
             Opcode::Ack => parse_ack(buf),
             Opcode::Error => parse_error(buf),
-            _ => Err("invalid packet".into()),
+            _ => Err("Invalid packet".into()),
+        }
+    }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        match self {
+            Packet::Data { block_num, data } => Ok(serialize_data(block_num, data)),
+            Packet::Ack(block_num) => Ok(serialize_ack(block_num)),
+            Packet::Error { code, msg } => Ok(serialize_error(code, msg)),
+            Packet::Oack { options } => Ok(serialize_oack(options)),
+            _ => Err("Invalid packet".into()),
         }
     }
 }
@@ -57,7 +70,7 @@ impl Opcode {
             0x0004 => Ok(Opcode::Ack),
             0x0005 => Ok(Opcode::Error),
             0x0006 => Ok(Opcode::Oack),
-            _ => Err("invalid opcode"),
+            _ => Err("Invalid opcode"),
         }
     }
 
@@ -105,13 +118,13 @@ impl OptionType {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
-            _ => Err("invalid option type".into()),
+            _ => Err("Invalid option type".into()),
         }
     }
 }
 
 #[repr(u16)]
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ErrorCode {
     NotDefined = 0,
     FileNotFound = 1,
@@ -134,7 +147,7 @@ impl ErrorCode {
             5 => Ok(ErrorCode::UnknownId),
             6 => Ok(ErrorCode::FileExists),
             7 => Ok(ErrorCode::NoSuchUser),
-            _ => Err("invalid error code"),
+            _ => Err("Invalid error code"),
         }
     }
 
@@ -192,7 +205,7 @@ fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
             mode,
             options,
         }),
-        _ => Err("non request opcode".into()),
+        _ => Err("Non request opcode".into()),
     }
 }
 
@@ -211,6 +224,39 @@ fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     let code = ErrorCode::from_u16(Convert::to_u16(&buf[2..])?)?;
     let (msg, _) = Convert::to_string(buf, 4)?;
     Ok(Packet::Error { code, msg })
+}
+
+fn serialize_data(block_num: &u16, data: &Vec<u8>) -> Vec<u8> {
+    [
+        &Opcode::Data.as_bytes(),
+        &block_num.to_be_bytes(),
+        data.as_slice(),
+    ]
+    .concat()
+}
+
+fn serialize_ack(block_num: &u16) -> Vec<u8> {
+    [Opcode::Ack.as_bytes(), block_num.to_be_bytes()].concat()
+}
+
+fn serialize_error(code: &ErrorCode, msg: &String) -> Vec<u8> {
+    [
+        &Opcode::Error.as_bytes()[..],
+        &code.as_bytes()[..],
+        &msg.as_bytes()[..],
+        &[0x00],
+    ]
+    .concat()
+}
+
+fn serialize_oack(options: &Vec<TransferOption>) -> Vec<u8> {
+    let mut buf = Opcode::Oack.as_bytes().to_vec();
+
+    for option in options {
+        buf = [buf, option.as_bytes()].concat();
+    }
+
+    buf
 }
 
 #[cfg(test)]
