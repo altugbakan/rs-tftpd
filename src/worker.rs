@@ -15,6 +15,7 @@ use crate::{
 
 pub struct Worker;
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct WorkerOptions {
     blk_size: usize,
     t_size: usize,
@@ -236,6 +237,7 @@ fn parse_options(
             OptionType::TransferSize => match work_type {
                 WorkType::Send(size) => {
                     *value = *size as usize;
+                    worker_options.t_size = *size as usize;
                 }
                 WorkType::Receive => {
                     worker_options.t_size = *value;
@@ -251,4 +253,73 @@ fn parse_options(
     }
 
     Ok(worker_options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_send_options() {
+        let mut options = vec![
+            TransferOption {
+                option: OptionType::BlockSize,
+                value: 1024,
+            },
+            TransferOption {
+                option: OptionType::TransferSize,
+                value: 0,
+            },
+            TransferOption {
+                option: OptionType::Timeout,
+                value: 5,
+            },
+        ];
+
+        let work_type = WorkType::Send(12341234);
+
+        let worker_options = parse_options(&mut options, &work_type).unwrap();
+
+        assert_eq!(options[0].value, worker_options.blk_size);
+        assert_eq!(options[1].value, worker_options.t_size);
+        assert_eq!(options[2].value as u64, worker_options.timeout);
+    }
+
+    #[test]
+    fn parses_receive_options() {
+        let mut options = vec![
+            TransferOption {
+                option: OptionType::BlockSize,
+                value: 1024,
+            },
+            TransferOption {
+                option: OptionType::TransferSize,
+                value: 44554455,
+            },
+            TransferOption {
+                option: OptionType::Timeout,
+                value: 5,
+            },
+        ];
+
+        let work_type = WorkType::Receive;
+
+        let worker_options = parse_options(&mut options, &work_type).unwrap();
+
+        assert_eq!(options[0].value, worker_options.blk_size);
+        assert_eq!(options[1].value, worker_options.t_size);
+        assert_eq!(options[2].value as u64, worker_options.timeout);
+    }
+
+    #[test]
+    fn parses_default_options() {
+        assert_eq!(
+            parse_options(&mut vec![], &WorkType::Receive).unwrap(),
+            WorkerOptions {
+                blk_size: DEFAULT_BLOCK_SIZE,
+                t_size: 0,
+                timeout: DEFAULT_TIMEOUT_SECS,
+            }
+        );
+    }
 }
