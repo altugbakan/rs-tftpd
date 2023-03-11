@@ -1,6 +1,6 @@
 [package]
 name = "tftpd"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Altuğ Bakan <mail@alt.ug>"]
 edition = "2021"
 description = "TFTP Server Daemon implemented in Rust"

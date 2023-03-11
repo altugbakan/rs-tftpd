@@ -1,7 +1,7 @@
 use crate::Convert;
-use std::error::Error;
+use std::{error::Error, fmt};
 
-pub enum Packet<'a> {
+pub enum Packet {
     Rrq {
         filename: String,
         mode: String,
@@ -14,7 +14,7 @@ pub enum Packet<'a> {
     },
     Data {
         block_num: u16,
-        data: &'a [u8],
+        data: Vec<u8>,
     },
     Ack(u16),
     Error {
@@ -23,9 +23,9 @@ pub enum Packet<'a> {
     },
 }
 
-impl<'a> Packet<'a> {
-    pub fn deserialize(buf: &'a [u8]) -> Result<Packet, Box<dyn Error>> {
-        let opcode = Opcode::from_u16(Convert::to_u16(&buf[0..1])?)?;
+impl Packet {
+    pub fn deserialize(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
+        let opcode = Opcode::from_u16(Convert::to_u16(&buf[0..=1])?)?;
 
         match opcode {
             Opcode::Rrq | Opcode::Wrq => parse_rq(buf, opcode),
@@ -66,7 +66,7 @@ impl Opcode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TransferOption {
     pub option: OptionType,
     pub value: usize,
@@ -84,7 +84,7 @@ impl TransferOption {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OptionType {
     BlockSize,
     TransferSize,
@@ -98,10 +98,6 @@ impl OptionType {
             OptionType::TransferSize => "tsize",
             OptionType::Timeout => "timeout",
         }
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        self.as_str().as_bytes()
     }
 
     fn from_str(value: &str) -> Result<Self, &'static str> {
@@ -147,6 +143,21 @@ impl ErrorCode {
     }
 }
 
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorCode::NotDefined => write!(f, "Not Defined"),
+            ErrorCode::FileNotFound => write!(f, "File Not Found"),
+            ErrorCode::AccessViolation => write!(f, "Access Violation"),
+            ErrorCode::DiskFull => write!(f, "Disk Full"),
+            ErrorCode::IllegalOperation => write!(f, "Illegal Operation"),
+            ErrorCode::UnknownId => write!(f, "Unknown ID"),
+            ErrorCode::FileExists => write!(f, "File Exists"),
+            ErrorCode::NoSuchUser => write!(f, "No Such User"),
+        }
+    }
+}
+
 fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
     let mut options = vec![];
     let filename: String;
@@ -188,7 +199,7 @@ fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
 fn parse_data(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     Ok(Packet::Data {
         block_num: Convert::to_u16(&buf[2..])?,
-        data: &buf[4..],
+        data: buf[4..].to_vec(),
     })
 }
 
@@ -239,11 +250,11 @@ mod tests {
             &[0x00],
             &"octet".as_bytes(),
             &[0x00],
-            &OptionType::TransferSize.as_bytes(),
+            &OptionType::TransferSize.as_str().as_bytes(),
             &[0x00],
             &"0".as_bytes(),
             &[0x00],
-            &OptionType::Timeout.as_bytes(),
+            &OptionType::Timeout.as_str().as_bytes(),
             &[0x00],
             &"5".as_bytes(),
             &[0x00],
@@ -311,11 +322,11 @@ mod tests {
             &[0x00],
             &"octet".as_bytes(),
             &[0x00],
-            &OptionType::TransferSize.as_bytes(),
+            &OptionType::TransferSize.as_str().as_bytes(),
             &[0x00],
             &"12341234".as_bytes(),
             &[0x00],
-            &OptionType::BlockSize.as_bytes(),
+            &OptionType::BlockSize.as_str().as_bytes(),
             &[0x00],
             &"1024".as_bytes(),
             &[0x00],

@@ -2,9 +2,7 @@ use crate::packet::{ErrorCode, Packet, TransferOption};
 use crate::{Config, Message, Worker};
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
-use std::path::{Path, PathBuf};
-
-const MAX_REQUEST_PACKET_SIZE: usize = 512;
+use std::path::PathBuf;
 
 pub struct Server {
     socket: UdpSocket,
@@ -25,63 +23,86 @@ impl Server {
 
     pub fn listen(&self) {
         loop {
-            let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
-            if let Ok((number_of_bytes, from)) = self.socket.recv_from(&mut buf) {
-                if let Ok(packet) = Packet::deserialize(&buf[..number_of_bytes]) {
-                    self.handle_packet(&packet, &from)
-                }
+            if let Ok((packet, from)) = Message::recv_from(&self.socket) {
+                match packet {
+                    Packet::Rrq {
+                        filename,
+                        mut options,
+                        ..
+                    } => match self.handle_rrq(filename.clone(), &mut options, &from) {
+                        Ok(_) => {
+                            println!("Sending {filename} to {from}");
+                        }
+                        Err(err) => eprintln!("{err}"),
+                    },
+                    Packet::Wrq {
+                        filename,
+                        mut options,
+                        ..
+                    } => match self.handle_wrq(filename.clone(), &mut options, &from) {
+                        Ok(_) => {
+                            println!("Receiving {filename} from {from}");
+                        }
+                        Err(err) => eprintln!("{err}"),
+                    },
+                    _ => {
+                        Message::send_error_to(
+                            &self.socket,
+                            &from,
+                            ErrorCode::IllegalOperation,
+                            "invalid request",
+                        )
+                        .unwrap_or_else(|err| eprintln!("{err}"));
+                    }
+                };
             }
         }
     }
 
-    fn handle_packet(&self, packet: &Packet, from: &SocketAddr) {
-        match &packet {
-            Packet::Rrq {
-                filename, options, ..
-            } => self.validate_rrq(filename, options, from),
-            Packet::Wrq {
-                filename, options, ..
-            } => self.validate_wrq(filename, options, from),
-            _ => {
-                Message::send_error_to(
-                    &self.socket,
-                    from,
-                    ErrorCode::IllegalOperation,
-                    "invalid request",
-                );
-            }
-        }
-    }
-
-    fn validate_rrq(&self, filename: &String, options: &Vec<TransferOption>, to: &SocketAddr) {
-        match self.check_file_exists(&Path::new(&filename)) {
+    fn handle_rrq(
+        &self,
+        filename: String,
+        options: &mut Vec<TransferOption>,
+        to: &SocketAddr,
+    ) -> Result<(), Box<dyn Error>> {
+        match check_file_exists(&get_full_path(&filename, &self.directory), &self.directory) {
             ErrorCode::FileNotFound => {
-                Message::send_error_to(
+                return Message::send_error_to(
                     &self.socket,
                     to,
                     ErrorCode::FileNotFound,
-                    "requested file does not exist",
+                    "file does not exist",
                 );
             }
             ErrorCode::AccessViolation => {
-                Message::send_error_to(
+                return Message::send_error_to(
                     &self.socket,
                     to,
                     ErrorCode::AccessViolation,
-                    "requested file is not in the directory",
+                    "file access violation",
                 );
             }
-            ErrorCode::FileExists => self
-                .handle_rrq(filename, options, to)
-                .unwrap_or_else(|err| eprintln!("could not handle read request: {err}")),
+            ErrorCode::FileExists => Worker::send(
+                self.socket.local_addr().unwrap(),
+                *to,
+                filename,
+                options.to_vec(),
+            ),
             _ => {}
         }
+
+        Ok(())
     }
 
-    fn validate_wrq(&self, filename: &String, options: &Vec<TransferOption>, to: &SocketAddr) {
-        match self.check_file_exists(&Path::new(&filename)) {
+    fn handle_wrq(
+        &self,
+        filename: String,
+        options: &mut Vec<TransferOption>,
+        to: &SocketAddr,
+    ) -> Result<(), Box<dyn Error>> {
+        match check_file_exists(&get_full_path(&filename, &self.directory), &self.directory) {
             ErrorCode::FileExists => {
-                Message::send_error_to(
+                return Message::send_error_to(
                     &self.socket,
                     to,
                     ErrorCode::FileExists,
@@ -89,53 +110,85 @@ impl Server {
                 );
             }
             ErrorCode::AccessViolation => {
-                Message::send_error_to(
+                return Message::send_error_to(
                     &self.socket,
                     to,
                     ErrorCode::AccessViolation,
-                    "requested file is not in the directory",
+                    "file access violation",
                 );
             }
-            ErrorCode::FileNotFound => self
-                .handle_wrq(filename, options, to)
-                .unwrap_or_else(|err| eprintln!("could not handle write request: {err}")),
+            ErrorCode::FileNotFound => Worker::receive(
+                self.socket.local_addr().unwrap(),
+                *to,
+                filename,
+                options.to_vec(),
+            ),
             _ => {}
         };
-    }
-
-    fn handle_rrq(
-        &self,
-        filename: &String,
-        options: &Vec<TransferOption>,
-        to: &SocketAddr,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut worker = Worker::new(&self.socket.local_addr().unwrap(), to)?;
-        worker.send_file(Path::new(&filename), options)?;
 
         Ok(())
     }
+}
 
-    fn handle_wrq(
-        &self,
-        filename: &String,
-        options: &Vec<TransferOption>,
-        to: &SocketAddr,
-    ) -> Result<(), Box<dyn Error>> {
-        let mut worker = Worker::new(&self.socket.local_addr().unwrap(), to)?;
-        worker.receive_file(Path::new(&filename), options)?;
-
-        Ok(())
+fn check_file_exists(file: &PathBuf, directory: &PathBuf) -> ErrorCode {
+    if !validate_file_path(file, directory) {
+        return ErrorCode::AccessViolation;
     }
 
-    fn check_file_exists(&self, file: &Path) -> ErrorCode {
-        if !file.ancestors().any(|a| a == &self.directory) {
-            return ErrorCode::AccessViolation;
-        }
+    if !file.exists() {
+        return ErrorCode::FileNotFound;
+    }
 
-        if !file.exists() {
-            return ErrorCode::FileNotFound;
-        }
+    ErrorCode::FileExists
+}
 
-        ErrorCode::FileExists
+fn validate_file_path(file: &PathBuf, directory: &PathBuf) -> bool {
+    !file.to_str().unwrap().contains("..") && file.ancestors().any(|a| a == directory)
+}
+
+fn get_full_path(filename: &str, directory: &PathBuf) -> PathBuf {
+    let mut file = directory.clone();
+    file.push(PathBuf::from(filename));
+    file
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gets_full_path() {
+        assert_eq!(
+            get_full_path("test.txt", &PathBuf::from("/dir/test")),
+            PathBuf::from("/dir/test/test.txt")
+        );
+
+        assert_eq!(
+            get_full_path("some_dir/test.txt", &PathBuf::from("/dir/test")),
+            PathBuf::from("/dir/test/some_dir/test.txt")
+        );
+    }
+
+    #[test]
+    fn validates_file_path() {
+        assert!(validate_file_path(
+            &PathBuf::from("/dir/test/file"),
+            &PathBuf::from("/dir/test")
+        ));
+
+        assert!(!validate_file_path(
+            &PathBuf::from("/system/data.txt"),
+            &PathBuf::from("/dir/test")
+        ));
+
+        assert!(!validate_file_path(
+            &PathBuf::from("~/some_data.txt"),
+            &PathBuf::from("/dir/test")
+        ));
+
+        assert!(!validate_file_path(
+            &PathBuf::from("/dir/test/../file"),
+            &PathBuf::from("/dir/test")
+        ));
     }
 }
