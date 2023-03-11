@@ -89,6 +89,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_windows_config() {
+        let config = Config::new(
+            vec!["/", "-i", "127.0.0.1", "-d", r"C:\Users\", "-p", "1567"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(config.ip_address, Ipv4Addr::new(127, 0, 0, 1));
+        assert_eq!(config.port, 1567);
+        assert_eq!(config.directory, PathBuf::from_str(r"C:\Users\").unwrap());
+    }
+
+    #[test]
     fn parses_some_config() {
         let config = Config::new(
             vec!["/", "-i", "0.0.0.0", "-d", "/"]
