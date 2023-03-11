@@ -474,4 +474,53 @@ mod tests {
             panic!("cannot parse error")
         }
     }
+
+    #[test]
+    fn serializes_data() {
+        let serialized_data = vec![0x00, 0x03, 0x00, 0x10, 0x01, 0x02, 0x03, 0x04];
+
+        assert_eq!(
+            serialize_data(&16, &vec![0x01, 0x02, 0x03, 0x04]),
+            serialized_data
+        );
+    }
+
+    #[test]
+    fn serializes_ack() {
+        let serialized_ack = vec![0x00, 0x04, 0x04, 0xD2];
+
+        assert_eq!(serialize_ack(&1234), serialized_ack);
+    }
+
+    #[test]
+    fn serializes_error() {
+        let serialized_error = vec![
+            0x00, 0x05, 0x00, 0x04, 0x69, 0x6C, 0x6C, 0x65, 0x67, 0x61, 0x6C, 0x20, 0x6F, 0x70,
+            0x65, 0x72, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x00,
+        ];
+
+        assert_eq!(
+            serialize_error(
+                &ErrorCode::IllegalOperation,
+                &"illegal operation".to_string()
+            ),
+            serialized_error
+        );
+    }
+
+    #[test]
+    fn serializes_oack() {
+        let serialized_oack = vec![
+            0x00, 0x06, 0x62, 0x6C, 0x6B, 0x73, 0x69, 0x7A, 0x65, 0x00, 0x31, 0x34, 0x33, 0x32,
+            0x00,
+        ];
+
+        assert_eq!(
+            serialize_oack(&vec![TransferOption {
+                option: OptionType::BlockSize,
+                value: 1432
+            }]),
+            serialized_oack
+        );
+    }
 }
