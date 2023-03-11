@@ -65,7 +65,8 @@ impl Server {
         options: &mut Vec<TransferOption>,
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        match check_file_exists(&get_full_path(&filename, &self.directory), &self.directory) {
+        let file_path = &self.directory.join(&filename);
+        match check_file_exists(&file_path, &self.directory) {
             ErrorCode::FileNotFound => {
                 return Message::send_error_to(
                     &self.socket,
@@ -85,7 +86,7 @@ impl Server {
             ErrorCode::FileExists => Worker::send(
                 self.socket.local_addr().unwrap(),
                 *to,
-                filename,
+                file_path.to_path_buf(),
                 options.to_vec(),
             ),
             _ => {}
@@ -100,7 +101,8 @@ impl Server {
         options: &mut Vec<TransferOption>,
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        match check_file_exists(&get_full_path(&filename, &self.directory), &self.directory) {
+        let file_path = &self.directory.join(&filename);
+        match check_file_exists(&file_path, &self.directory) {
             ErrorCode::FileExists => {
                 return Message::send_error_to(
                     &self.socket,
@@ -120,7 +122,7 @@ impl Server {
             ErrorCode::FileNotFound => Worker::receive(
                 self.socket.local_addr().unwrap(),
                 *to,
-                filename,
+                file_path.to_path_buf(),
                 options.to_vec(),
             ),
             _ => {}
@@ -146,28 +148,9 @@ fn validate_file_path(file: &PathBuf, directory: &PathBuf) -> bool {
     !file.to_str().unwrap().contains("..") && file.ancestors().any(|a| a == directory)
 }
 
-fn get_full_path(filename: &str, directory: &PathBuf) -> PathBuf {
-    let mut file = directory.clone();
-    file.push(PathBuf::from(filename));
-    file
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn gets_full_path() {
-        assert_eq!(
-            get_full_path("test.txt", &PathBuf::from("/dir/test")),
-            PathBuf::from("/dir/test/test.txt")
-        );
-
-        assert_eq!(
-            get_full_path("some_dir/test.txt", &PathBuf::from("/dir/test")),
-            PathBuf::from("/dir/test/some_dir/test.txt")
-        );
-    }
 
     #[test]
     fn validates_file_path() {

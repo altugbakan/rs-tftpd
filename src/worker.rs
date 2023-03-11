@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     net::{SocketAddr, UdpSocket},
-    path::Path,
+    path::{Path, PathBuf},
     thread,
     time::Duration,
 };
@@ -35,16 +35,16 @@ impl Worker {
     pub fn send(
         addr: SocketAddr,
         remote: SocketAddr,
-        filename: String,
+        file_path: PathBuf,
         mut options: Vec<TransferOption>,
     ) {
         thread::spawn(move || {
             let mut handle_send = || -> Result<(), Box<dyn Error>> {
                 let socket = setup_socket(&addr, &remote)?;
-                let work_type = WorkType::Send(Path::new(&filename).metadata().unwrap().len());
+                let work_type = WorkType::Send(Path::new(&file_path).metadata().unwrap().len());
                 accept_request(&socket, &options, &work_type)?;
                 check_response(&socket)?;
-                send_file(&socket, &filename, &mut options)?;
+                send_file(&socket, &file_path, &mut options)?;
 
                 Ok(())
             };
@@ -58,7 +58,7 @@ impl Worker {
     pub fn receive(
         addr: SocketAddr,
         remote: SocketAddr,
-        filename: String,
+        file_path: PathBuf,
         mut options: Vec<TransferOption>,
     ) {
         thread::spawn(move || {
@@ -66,7 +66,7 @@ impl Worker {
                 let socket = setup_socket(&addr, &remote)?;
                 let work_type = WorkType::Receive;
                 accept_request(&socket, &options, &work_type)?;
-                receive_file(&socket, &filename, &mut options)?;
+                receive_file(&socket, &file_path, &mut options)?;
 
                 Ok(())
             };
@@ -80,10 +80,10 @@ impl Worker {
 
 fn send_file(
     socket: &UdpSocket,
-    filename: &String,
+    file_path: &PathBuf,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut file = File::open(filename).unwrap();
+    let mut file = File::open(file_path).unwrap();
     let worker_options = parse_options(options, &WorkType::Send(file.metadata().unwrap().len()))?;
 
     let mut block_number = 1;
@@ -119,16 +119,20 @@ fn send_file(
         };
     }
 
-    println!("Sent {filename} to {}", socket.peer_addr().unwrap());
+    println!(
+        "Sent {} to {}",
+        file_path.display(),
+        socket.peer_addr().unwrap()
+    );
     Ok(())
 }
 
 fn receive_file(
     socket: &UdpSocket,
-    filename: &String,
+    file_path: &PathBuf,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut file = File::create(filename).unwrap();
+    let mut file = File::create(file_path).unwrap();
     let worker_options = parse_options(options, &WorkType::Receive)?;
 
     let mut block_number: u16 = 0;
@@ -170,7 +174,11 @@ fn receive_file(
         };
     }
 
-    println!("Received {filename} from {}", socket.peer_addr().unwrap());
+    println!(
+        "Received {} from {}",
+        file_path.display(),
+        socket.peer_addr().unwrap()
+    );
     Ok(())
 }
 
