@@ -76,7 +76,7 @@ impl Config {
                     println!(
                         "  -p, --port <PORT>\t\tSet the listening port of the server (Default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
+                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (Default: Current Working Directory)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
