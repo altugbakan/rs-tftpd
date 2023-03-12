@@ -1,32 +1,62 @@
 use crate::Convert;
 use std::{error::Error, fmt};
 
+/// Packet `enum` represents the valid TFTP packet types.
+///
+/// This `enum` has function implementaions for serializing [`Packet`]s into
+///  [`Vec<u8>`]s and deserializing [`u8`] slices to [`Packet`]s.
+///
+/// # Example
+/// ```rust
+/// use tftpd::Packet;
+///
+/// let packet = Packet::Data { block_num: 15, data: vec![0x01, 0x02, 0x03] };
+///
+/// assert_eq!(packet.serialize().unwrap(), vec![0x00, 0x03, 0x00, 0x0F, 0x01, 0x02, 0x03]);
+/// assert_eq!(Packet::deserialize(&[0x00, 0x03, 0x00, 0x0F, 0x01, 0x02, 0x03]).unwrap(), packet);
+/// ```
+#[derive(Debug, PartialEq)]
 pub enum Packet {
+    /// Read Request `struct`
     Rrq {
+        /// Name of the requested file
         filename: String,
+        /// Transfer mode
         mode: String,
+        /// Transfer options
         options: Vec<TransferOption>,
     },
+    /// Write Request `struct`
     Wrq {
+        /// Name of the requested file
         filename: String,
+        /// Transfer mode
         mode: String,
+        /// Transfer options
         options: Vec<TransferOption>,
     },
+    /// Data `struct`
     Data {
+        /// Block number
         block_num: u16,
+        /// Data
         data: Vec<u8>,
     },
+    /// Acknowledgement `tuple` with block number
     Ack(u16),
+    /// Error `struct`
     Error {
+        /// Error code
         code: ErrorCode,
+        /// Error message
         msg: String,
     },
-    Oack {
-        options: Vec<TransferOption>,
-    },
+    /// Option acknowledgement `tuple` with transfer options
+    Oack(Vec<TransferOption>),
 }
 
 impl Packet {
+    /// Deserializes a [`u8`] slice into a [`Packet`].
     pub fn deserialize(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
         let opcode = Opcode::from_u16(Convert::to_u16(&buf[0..=1])?)?;
 
@@ -39,29 +69,50 @@ impl Packet {
         }
     }
 
+    /// Serializes a [`Packet`] into a [`Vec<u8>`].
     pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         match self {
             Packet::Data { block_num, data } => Ok(serialize_data(block_num, data)),
             Packet::Ack(block_num) => Ok(serialize_ack(block_num)),
             Packet::Error { code, msg } => Ok(serialize_error(code, msg)),
-            Packet::Oack { options } => Ok(serialize_oack(options)),
+            Packet::Oack(options) => Ok(serialize_oack(options)),
             _ => Err("Invalid packet".into()),
         }
     }
 }
 
+/// Opcode `enum` represents the opcodes used in the TFTP definition.
+///
+/// This `enum` has function implementations for converting [`u16`]s to
+/// [`Opcode`]s and [`Opcode`]s to [`u8`] arrays.
+///
+/// # Example
+///
+/// ```rust
+/// use tftpd::Opcode;
+///
+/// assert_eq!(Opcode::from_u16(3).unwrap(), Opcode::Data);
+/// assert_eq!(Opcode::Ack.as_bytes(), [0x00, 0x04]);
+/// ```
 #[repr(u16)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Opcode {
+    /// Read request opcode
     Rrq = 0x0001,
+    /// Write request opcode
     Wrq = 0x0002,
+    /// Data opcode
     Data = 0x0003,
+    /// Acknowledgement opcode
     Ack = 0x0004,
+    /// Error opcode
     Error = 0x0005,
+    /// Option acknowledgement opcode
     Oack = 0x0006,
 }
 
 impl Opcode {
+    /// Converts a [`u16`] to an [`Opcode`].
     pub fn from_u16(val: u16) -> Result<Opcode, &'static str> {
         match val {
             0x0001 => Ok(Opcode::Rrq),
@@ -74,18 +125,37 @@ impl Opcode {
         }
     }
 
+    /// Converts a [`u16`] to a [`u8`] array with 2 elements.
     pub fn as_bytes(self) -> [u8; 2] {
         return (self as u16).to_be_bytes();
     }
 }
 
+/// TransferOption `struct` represents the TFTP transfer options.
+///
+/// This `struct` has a function implementation for converting [`TransferOption`]s
+/// to [`Vec<u8>`]s.
+///
+/// # Example
+///
+/// ```rust
+/// use tftpd::{TransferOption, OptionType};
+///
+/// assert_eq!(TransferOption { option: OptionType::BlockSize, value: 1432 }.as_bytes(), vec![
+///     0x62, 0x6C, 0x6B, 0x73, 0x69, 0x7A, 0x65, 0x00, 0x31, 0x34, 0x33, 0x32,
+///     0x00,
+/// ]);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TransferOption {
+    /// Type of the option
     pub option: OptionType,
+    /// Value of the option
     pub value: usize,
 }
 
 impl TransferOption {
+    /// Converts a [`TransferOption`] to a [`Vec<u8>`].
     pub fn as_bytes(&self) -> Vec<u8> {
         [
             self.option.as_str().as_bytes(),
@@ -97,15 +167,32 @@ impl TransferOption {
     }
 }
 
+/// OptionType `enum` represents the TFTP option types
+///
+/// This `enum` has function implementations for conversion between
+/// [`OptionType`]s and [`str`]s.
+///
+/// # Example
+///
+/// ```rust
+/// use tftpd::OptionType;
+///
+/// assert_eq!(OptionType::BlockSize, OptionType::from_str("blksize").unwrap());
+/// assert_eq!("tsize", OptionType::TransferSize.as_str());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OptionType {
+    /// Block Size option type
     BlockSize,
+    /// Transfer Size option type
     TransferSize,
+    /// Timeout option type
     Timeout,
 }
 
 impl OptionType {
-    fn as_str(&self) -> &'static str {
+    /// Converts an [`OptionType`] to a [`str`].
+    pub fn as_str(&self) -> &'static str {
         match self {
             OptionType::BlockSize => "blksize",
             OptionType::TransferSize => "tsize",
@@ -113,7 +200,8 @@ impl OptionType {
         }
     }
 
-    fn from_str(value: &str) -> Result<Self, &'static str> {
+    /// Converts a [`str`] to an [`OptionType`].
+    pub fn from_str(value: &str) -> Result<Self, &'static str> {
         match value {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
@@ -123,20 +211,42 @@ impl OptionType {
     }
 }
 
+/// ErrorCode `enum` represents the error codes used in the TFTP definition.
+///
+/// This `enum` has function implementations for converting [`u16`]s to
+/// [`ErrorCode`]s and [`ErrorCode`]s to [`u8`] arrays.
+///
+/// # Example
+///
+/// ```rust
+/// use tftpd::ErrorCode;
+///
+/// assert_eq!(ErrorCode::from_u16(3).unwrap(), ErrorCode::DiskFull);
+/// assert_eq!(ErrorCode::FileExists.as_bytes(), [0x00, 0x06]);
+/// ```
 #[repr(u16)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ErrorCode {
+    /// Not Defined error code
     NotDefined = 0,
+    /// File not found error code
     FileNotFound = 1,
+    /// Access violation error code
     AccessViolation = 2,
+    /// Disk full error code
     DiskFull = 3,
+    /// Illegal operation error code
     IllegalOperation = 4,
+    /// Unknown ID error code
     UnknownId = 5,
+    /// File exists error code
     FileExists = 6,
+    /// No such user error code
     NoSuchUser = 7,
 }
 
 impl ErrorCode {
+    /// Converts a [`u16`] to an [`ErrorCode`].
     pub fn from_u16(code: u16) -> Result<ErrorCode, &'static str> {
         match code {
             0 => Ok(ErrorCode::NotDefined),
@@ -151,6 +261,7 @@ impl ErrorCode {
         }
     }
 
+    /// Converts an [`ErrorCode`] to a [`u8`] array with 2 elements.
     pub fn as_bytes(self) -> [u8; 2] {
         return (self as u16).to_be_bytes();
     }

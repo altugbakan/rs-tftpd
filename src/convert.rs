@@ -1,8 +1,22 @@
 use std::error::Error;
 
+/// Allows conversions between byte arrays and other types.
+///
+/// # Example
+///
+/// ```rust
+/// use tftpd::Convert;
+///
+/// assert_eq!(Convert::to_u16(&[0x01, 0x02]).unwrap(), 0x0102);
+///
+/// let (result, index) = Convert::to_string(b"hello world\0", 0).unwrap();
+/// assert_eq!(result, "hello world");
+/// assert_eq!(index, 11);
+/// ```
 pub struct Convert;
 
 impl Convert {
+    /// Converts a [`u8`] slice to a [`u16`].
     pub fn to_u16(buf: &[u8]) -> Result<u16, &'static str> {
         if buf.len() < 2 {
             Err("Error when converting to u16")
@@ -11,6 +25,8 @@ impl Convert {
         }
     }
 
+    /// Converts a zero terminated [`u8`] slice to a [`String`], and returns the
+    /// size of the [`String`]. Useful for TFTP packet conversions.
     pub fn to_string(buf: &[u8], start: usize) -> Result<(String, usize), Box<dyn Error>> {
         match buf[start..].iter().position(|&b| b == 0x00) {
             Some(index) => Ok((

@@ -8,15 +8,32 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    packet::{ErrorCode, OptionType, Packet, TransferOption},
-    Message,
-};
+use crate::{ErrorCode, Message, OptionType, Packet, TransferOption};
 
+/// Worker `struct` is used for multithreaded file sending and receiving.
+/// It creates a new socket using the Server's IP and a random port
+/// requested from the OS to communicate with the requesting client.
+///
+/// See [`Worker::send()`] and [`Worker::receive()`] for more details.
+///
+/// # Example
+///
+/// ```rust
+/// use std::{net::SocketAddr, path::PathBuf, str::FromStr};
+/// use tftpd::Worker;
+///
+/// // Send a file, responding to a read request.
+/// Worker::send(
+///     SocketAddr::from_str("127.0.0.1:1234").unwrap(),
+///     SocketAddr::from_str("127.0.0.1:4321").unwrap(),
+///     PathBuf::from_str("/home/rust/test.txt").unwrap(),
+///     vec![]
+/// );
+/// ```
 pub struct Worker;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct WorkerOptions {
+struct WorkerOptions {
     blk_size: usize,
     t_size: usize,
     timeout: u64,
@@ -33,6 +50,8 @@ const DEFAULT_TIMEOUT_SECS: u64 = 5;
 const DEFAULT_BLOCK_SIZE: usize = 512;
 
 impl Worker {
+    /// Sends a file to the remote [`SocketAddr`] that has sent a read request using
+    /// a random port, asynchronously.
     pub fn send(
         addr: SocketAddr,
         remote: SocketAddr,
@@ -56,6 +75,8 @@ impl Worker {
         });
     }
 
+    /// Receives a file from the remote [`SocketAddr`] that has sent a write request using
+    /// a random port, asynchronously.
     pub fn receive(
         addr: SocketAddr,
         remote: SocketAddr,

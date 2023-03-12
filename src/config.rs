@@ -3,13 +3,33 @@ use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
+/// Configuration `struct` used for parsing TFTP options from user
+/// input.
+///
+/// This `struct` is meant to be created by [`Config::new()`]. See its
+/// documentation for more.
+///
+/// # Example
+///
+/// ```rust
+/// // Create TFTP configuration from user arguments.
+/// use std::env;
+/// use tftpd::Config;
+///
+/// let config = Config::new(env::args()).unwrap();
+/// ```
 pub struct Config {
+    /// Local IP address of the TFTP Server. (default: 127.0.0.1)
     pub ip_address: Ipv4Addr,
+    /// Local Port number of the TFTP Server. (default: 69)
     pub port: u16,
+    /// Default directory of the TFTP Server. (default: current working directory)
     pub directory: PathBuf,
 }
 
 impl Config {
+    /// Creates a new configuration by parsing the supplied arguments. It is
+    /// intended for use with [`env::args()`].
     pub fn new<T>(mut args: T) -> Result<Config, Box<dyn Error>>
     where
         T: Iterator<Item = String>,

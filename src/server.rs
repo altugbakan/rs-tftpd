@@ -1,15 +1,31 @@
-use crate::packet::{ErrorCode, Packet, TransferOption};
 use crate::{Config, Message, Worker};
+use crate::{ErrorCode, Packet, TransferOption};
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;
 
+/// Server `struct` is used for handling incoming TFTP requests.
+///
+/// This `struct` is meant to be created by [`Server::new()`]. See its
+/// documentation for more.
+///
+/// # Example
+///
+/// ```rust
+/// // Create the TFTP server.
+/// use std::env;
+/// use tftpd::{Config, Server};
+///
+/// let config = Config::new(env::args()).unwrap();
+/// let server = Server::new(&config).unwrap();
+/// ```
 pub struct Server {
     socket: UdpSocket,
     directory: PathBuf,
 }
 
 impl Server {
+    /// Creates the TFTP Server with the supplied [`Config`].
     pub fn new(config: &Config) -> Result<Server, Box<dyn Error>> {
         let socket = UdpSocket::bind(SocketAddr::from((config.ip_address, config.port)))?;
 
@@ -21,6 +37,7 @@ impl Server {
         Ok(server)
     }
 
+    /// Starts listening for connections. Note that this function does not finish running until termination.
     pub fn listen(&self) {
         loop {
             if let Ok((packet, from)) = Message::recv_from(&self.socket) {
