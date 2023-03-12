@@ -72,11 +72,11 @@ impl Config {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
                     println!("Options:");
-                    println!("  -i, --ip-address <IP ADDRESS>\tSet the ip address of the server (Default: 127.0.0.1)");
+                    println!("  -i, --ip-address <IP ADDRESS>\tSet the ip address of the server (default: 127.0.0.1)");
                     println!(
-                        "  -p, --port <PORT>\t\tSet the listening port of the server (Default: 69)"
+                        "  -p, --port <PORT>\t\tSet the listening port of the server (default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (Default: Current Working Directory)");
+                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
