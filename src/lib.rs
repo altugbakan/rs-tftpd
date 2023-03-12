@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! Multithreaded TFTP daemon implemented in pure Rust without dependencies.
+//! Multithreaded TFTP daemon implemented in pure Rust.
 //!
 //! This server implements [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350), The TFTP Protocol (Revision 2).
 //! It also supports the following [RFC 2347](https://www.rfc-editor.org/rfc/rfc2347) TFTP Option Extensions:

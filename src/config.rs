@@ -74,9 +74,9 @@ impl Config {
                     println!("Options:");
                     println!("  -i, --ip-address <IP ADDRESS>\tSet the ip address of the server (Default: 127.0.0.1)");
                     println!(
-                        "  -p, --port <PORT>\t\tSet the listening port of the server (Default: )"
+                        "  -p, --port <PORT>\t\tSet the listening port of the server (Default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (Default: )");
+                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
