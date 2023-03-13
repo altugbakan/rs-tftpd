@@ -1,6 +1,6 @@
 [package]
 name = "tftpd"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Altuğ Bakan <mail@alt.ug>"]
 edition = "2021"
 description = "Multithreaded TFTP server daemon"

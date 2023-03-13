@@ -49,7 +49,7 @@ impl Server {
                     } => {
                         println!("Sending {filename} to {from}");
                         if let Err(err) = self.handle_rrq(filename.clone(), &mut options, &from) {
-                            eprintln!("{err}")
+                            eprintln!("Error while sending file: {err}")
                         }
                     }
                     Packet::Wrq {
@@ -59,7 +59,7 @@ impl Server {
                     } => {
                         println!("Receiving {filename} from {from}");
                         if let Err(err) = self.handle_wrq(filename.clone(), &mut options, &from) {
-                            eprintln!("{err}")
+                            eprintln!("Error while receiving file: {err}")
                         }
                     }
                     _ => {
@@ -69,7 +69,7 @@ impl Server {
                             ErrorCode::IllegalOperation,
                             "invalid request".to_string(),
                         )
-                        .unwrap_or_else(|err| eprintln!("{err}"));
+                        .unwrap_or_else(|_| eprintln!("Received invalid request"));
                     }
                 };
             }

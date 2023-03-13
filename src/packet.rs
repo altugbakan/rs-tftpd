@@ -333,8 +333,14 @@ fn parse_ack(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
 
 fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     let code = ErrorCode::from_u16(Convert::to_u16(&buf[2..])?)?;
-    let (msg, _) = Convert::to_string(buf, 4)?;
-    Ok(Packet::Error { code, msg })
+    if let Ok((msg, _)) = Convert::to_string(buf, 4) {
+        Ok(Packet::Error { code, msg })
+    } else {
+        Ok(Packet::Error {
+            code,
+            msg: "(no message)".to_string(),
+        })
+    }
 }
 
 fn serialize_data(block_num: &u16, data: &Vec<u8>) -> Vec<u8> {

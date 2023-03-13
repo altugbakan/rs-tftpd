@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fs::File,
+    fs::{self, File},
     io::{Read, Write},
     net::{SocketAddr, UdpSocket},
     path::{Path, PathBuf},
@@ -95,6 +95,12 @@ impl Worker {
 
             if let Err(err) = handle_receive() {
                 eprintln!("{err}");
+                if fs::remove_file(&file_path).is_err() {
+                    eprintln!(
+                        "Error while cleaning {}",
+                        file_path.file_name().unwrap().to_str().unwrap()
+                    );
+                }
             }
         });
     }
@@ -143,7 +149,7 @@ fn send_file(
 
     println!(
         "Sent {} to {}",
-        file_path.display(),
+        file_path.file_name().unwrap().to_str().unwrap(),
         socket.peer_addr().unwrap()
     );
     Ok(())
@@ -198,7 +204,7 @@ fn receive_file(
 
     println!(
         "Received {} from {}",
-        file_path.display(),
+        file_path.file_name().unwrap().to_str().unwrap(),
         socket.peer_addr().unwrap()
     );
     Ok(())
