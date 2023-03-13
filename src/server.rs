@@ -13,10 +13,10 @@ use std::path::PathBuf;
 ///
 /// ```rust
 /// // Create the TFTP server.
-/// use std::env;
 /// use tftpd::{Config, Server};
 ///
-/// let config = Config::new(env::args()).unwrap();
+/// let args = ["/", "-p", "1234"].iter().map(|s| s.to_string());
+/// let config = Config::new(args).unwrap();
 /// let server = Server::new(&config).unwrap();
 /// ```
 pub struct Server {

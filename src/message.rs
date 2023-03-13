@@ -16,7 +16,7 @@ use crate::{ErrorCode, Packet, TransferOption};
 ///
 /// // Send a FileNotFound error.
 /// Message::send_error_to(
-///     &UdpSocket::bind(SocketAddr::from_str("127.0.0.1:69").unwrap()).unwrap(),
+///     &UdpSocket::bind(SocketAddr::from_str("127.0.0.1:6969").unwrap()).unwrap(),
 ///     &SocketAddr::from_str("127.0.0.1:1234").unwrap(),
 ///     ErrorCode::FileNotFound,
 ///     "file does not exist".to_string(),
