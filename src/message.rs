@@ -19,7 +19,7 @@ use crate::{ErrorCode, Packet, TransferOption};
 ///     &UdpSocket::bind(SocketAddr::from_str("127.0.0.1:6969").unwrap()).unwrap(),
 ///     &SocketAddr::from_str("127.0.0.1:1234").unwrap(),
 ///     ErrorCode::FileNotFound,
-///     "file does not exist".to_string(),
+///     "file does not exist",
 /// );
 /// ```
 pub struct Message;
@@ -63,17 +63,17 @@ impl Message {
     }
 
     /// Sends an error packet to the supplied [`SocketAddr`].
-    pub fn send_error_to<'a>(
+    pub fn send_error_to(
         socket: &UdpSocket,
         to: &SocketAddr,
         code: ErrorCode,
-        msg: String,
+        msg: &str,
     ) -> Result<(), Box<dyn Error>> {
         if socket
             .send_to(
                 &Packet::Error {
                     code,
-                    msg: msg.clone(),
+                    msg: msg.to_string(),
                 }
                 .serialize()?,
                 to,
@@ -122,7 +122,10 @@ impl Message {
     /// Receives a data packet from the socket's connected remote, and returns the
     /// parsed [`Packet`]. The received packet can actually be of any type, however,
     /// this function also allows supplying the buffer size for an incoming request.
-    pub fn recv_data(socket: &UdpSocket, size: usize) -> Result<Packet, Box<dyn Error>> {
+    pub fn recv_packet_with_size(
+        socket: &UdpSocket,
+        size: usize,
+    ) -> Result<Packet, Box<dyn Error>> {
         let mut buf = vec![0; size + 4];
         let number_of_bytes = socket.recv(&mut buf)?;
         let packet = Packet::deserialize(&buf[..number_of_bytes])?;

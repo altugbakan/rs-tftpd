@@ -67,7 +67,7 @@ impl Server {
                             &self.socket,
                             &from,
                             ErrorCode::IllegalOperation,
-                            "invalid request".to_string(),
+                            "invalid request",
                         )
                         .unwrap_or_else(|_| eprintln!("Received invalid request"));
                     }
@@ -84,32 +84,26 @@ impl Server {
     ) -> Result<(), Box<dyn Error>> {
         let file_path = &self.directory.join(&filename);
         match check_file_exists(&file_path, &self.directory) {
-            ErrorCode::FileNotFound => {
-                return Message::send_error_to(
-                    &self.socket,
-                    to,
-                    ErrorCode::FileNotFound,
-                    "file does not exist".to_string(),
-                );
-            }
-            ErrorCode::AccessViolation => {
-                return Message::send_error_to(
-                    &self.socket,
-                    to,
-                    ErrorCode::AccessViolation,
-                    "file access violation".to_string(),
-                );
-            }
-            ErrorCode::FileExists => Worker::send(
+            ErrorCode::FileNotFound => Message::send_error_to(
+                &self.socket,
+                to,
+                ErrorCode::FileNotFound,
+                "file does not exist",
+            ),
+            ErrorCode::AccessViolation => Message::send_error_to(
+                &self.socket,
+                to,
+                ErrorCode::AccessViolation,
+                "file access violation",
+            ),
+            ErrorCode::FileExists => Ok(Worker::send(
                 self.socket.local_addr().unwrap(),
                 *to,
                 file_path.to_path_buf(),
                 options.to_vec(),
-            ),
-            _ => {}
+            )),
+            _ => Err("unexpected error code when checking file".into()),
         }
-
-        Ok(())
     }
 
     fn handle_wrq(
@@ -120,32 +114,26 @@ impl Server {
     ) -> Result<(), Box<dyn Error>> {
         let file_path = &self.directory.join(&filename);
         match check_file_exists(&file_path, &self.directory) {
-            ErrorCode::FileExists => {
-                return Message::send_error_to(
-                    &self.socket,
-                    to,
-                    ErrorCode::FileExists,
-                    "requested file already exists".to_string(),
-                );
-            }
-            ErrorCode::AccessViolation => {
-                return Message::send_error_to(
-                    &self.socket,
-                    to,
-                    ErrorCode::AccessViolation,
-                    "file access violation".to_string(),
-                );
-            }
-            ErrorCode::FileNotFound => Worker::receive(
+            ErrorCode::FileExists => Message::send_error_to(
+                &self.socket,
+                to,
+                ErrorCode::FileExists,
+                "requested file already exists",
+            ),
+            ErrorCode::AccessViolation => Message::send_error_to(
+                &self.socket,
+                to,
+                ErrorCode::AccessViolation,
+                "file access violation",
+            ),
+            ErrorCode::FileNotFound => Ok(Worker::receive(
                 self.socket.local_addr().unwrap(),
                 *to,
                 file_path.to_path_buf(),
                 options.to_vec(),
-            ),
-            _ => {}
-        };
-
-        Ok(())
+            )),
+            _ => Err("unexpected error code when checking file".into()),
+        }
     }
 }
 

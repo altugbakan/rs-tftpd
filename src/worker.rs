@@ -3,7 +3,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     net::{SocketAddr, UdpSocket},
-    path::{Path, PathBuf},
+    path::PathBuf,
     thread,
     time::Duration,
 };
@@ -61,7 +61,7 @@ impl Worker {
         thread::spawn(move || {
             let mut handle_send = || -> Result<(), Box<dyn Error>> {
                 let socket = setup_socket(&addr, &remote)?;
-                let work_type = WorkType::Send(Path::new(&file_path).metadata().unwrap().len());
+                let work_type = WorkType::Send(file_path.metadata()?.len());
                 accept_request(&socket, &options, &work_type)?;
                 check_response(&socket)?;
                 send_file(&socket, &file_path, &mut options)?;
@@ -112,7 +112,7 @@ fn send_file(
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
     let mut file = File::open(file_path).unwrap();
-    let worker_options = parse_options(options, &WorkType::Send(file.metadata().unwrap().len()))?;
+    let worker_options = parse_options(options, &WorkType::Send(file.metadata()?.len()))?;
 
     let mut block_number = 1;
     loop {
@@ -150,7 +150,7 @@ fn send_file(
     println!(
         "Sent {} to {}",
         file_path.file_name().unwrap().to_str().unwrap(),
-        socket.peer_addr().unwrap()
+        socket.peer_addr()?
     );
     Ok(())
 }
@@ -160,7 +160,7 @@ fn receive_file(
     file_path: &PathBuf,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut file = File::create(file_path).unwrap();
+    let mut file = File::create(file_path)?;
     let worker_options = parse_options(options, &WorkType::Receive)?;
 
     let mut block_number: u16 = 0;
@@ -169,7 +169,7 @@ fn receive_file(
 
         let mut retry_cnt = 0;
         loop {
-            match Message::recv_data(socket, worker_options.blk_size) {
+            match Message::recv_packet_with_size(socket, worker_options.blk_size) {
                 Ok(Packet::Data {
                     block_num: received_block_number,
                     data,

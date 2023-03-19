@@ -25,7 +25,7 @@ impl Convert {
         }
     }
 
-    /// Converts a zero terminated [`u8`] slice to a [`String`], and returns the
+    /// Converts a zero-terminated [`u8`] slice to a [`String`], and returns the
     /// size of the [`String`]. Useful for TFTP packet conversions.
     pub fn to_string(buf: &[u8], start: usize) -> Result<(String, usize), Box<dyn Error>> {
         match buf[start..].iter().position(|&b| b == 0x00) {
@@ -33,7 +33,7 @@ impl Convert {
                 String::from_utf8(buf[start..start + index].to_vec())?,
                 index + start,
             )),
-            None => return Err("Invalid string".into()),
+            None => Err("Invalid string".into()),
         }
     }
 }

@@ -70,13 +70,13 @@ impl Packet {
     }
 
     /// Serializes a [`Packet`] into a [`Vec<u8>`].
-    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn serialize(&self) -> Result<Vec<u8>, &'static str> {
         match self {
             Packet::Data { block_num, data } => Ok(serialize_data(block_num, data)),
             Packet::Ack(block_num) => Ok(serialize_ack(block_num)),
             Packet::Error { code, msg } => Ok(serialize_error(code, msg)),
             Packet::Oack(options) => Ok(serialize_oack(options)),
-            _ => Err("Invalid packet".into()),
+            _ => Err("Invalid packet"),
         }
     }
 }
@@ -126,7 +126,7 @@ impl Opcode {
     }
 
     /// Converts a [`u16`] to a [`u8`] array with 2 elements.
-    pub fn as_bytes(self) -> [u8; 2] {
+    pub const fn as_bytes(self) -> [u8; 2] {
         return (self as u16).to_be_bytes();
     }
 }
