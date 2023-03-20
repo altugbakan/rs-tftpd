@@ -5,7 +5,7 @@ use std::{
     net::{SocketAddr, UdpSocket},
     path::PathBuf,
     thread,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use crate::{ErrorCode, Message, OptionType, Packet, TransferOption};
@@ -111,7 +111,7 @@ fn send_file(
     file_path: &PathBuf,
     options: &mut Vec<TransferOption>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut file = File::open(file_path).unwrap();
+    let mut file = File::open(file_path)?;
     let worker_options = parse_options(options, &WorkType::Send(file.metadata()?.len()))?;
 
     let mut block_number = 1;
@@ -120,8 +120,12 @@ fn send_file(
         let size = file.read(&mut chunk)?;
 
         let mut retry_cnt = 0;
+        let mut time = SystemTime::now() - Duration::from_secs(DEFAULT_TIMEOUT_SECS);
         loop {
-            Message::send_data(socket, block_number, chunk[..size].to_vec())?;
+            if time.elapsed()? >= Duration::from_secs(DEFAULT_TIMEOUT_SECS) {
+                Message::send_data(socket, block_number, chunk[..size].to_vec())?;
+                time = SystemTime::now();
+            }
 
             match Message::recv(socket) {
                 Ok(Packet::Ack(received_block_number)) => {
@@ -131,7 +135,7 @@ fn send_file(
                     }
                 }
                 Ok(Packet::Error { code, msg }) => {
-                    return Err(format!("Received error code {code}, with message {msg}").into());
+                    return Err(format!("Received error code {code}: {msg}").into());
                 }
                 _ => {
                     retry_cnt += 1;
@@ -184,15 +188,12 @@ fn receive_file(
                 Ok(Packet::Error { code, msg }) => {
                     return Err(format!("Received error code {code}: {msg}").into());
                 }
-                Err(err) => {
+                _ => {
                     retry_cnt += 1;
                     if retry_cnt == MAX_RETRIES {
-                        return Err(
-                            format!("Transfer timed out after {MAX_RETRIES} tries: {err}").into(),
-                        );
+                        return Err(format!("Transfer timed out after {MAX_RETRIES} tries").into());
                     }
                 }
-                _ => {}
             }
         }
 
@@ -205,7 +206,7 @@ fn receive_file(
     println!(
         "Received {} from {}",
         file_path.file_name().unwrap().to_str().unwrap(),
-        socket.peer_addr().unwrap()
+        socket.peer_addr()?
     );
     Ok(())
 }

@@ -97,7 +97,7 @@ impl Server {
                 "file access violation",
             ),
             ErrorCode::FileExists => Ok(Worker::send(
-                self.socket.local_addr().unwrap(),
+                self.socket.local_addr()?,
                 *to,
                 file_path.to_path_buf(),
                 options.to_vec(),
@@ -127,7 +127,7 @@ impl Server {
                 "file access violation",
             ),
             ErrorCode::FileNotFound => Ok(Worker::receive(
-                self.socket.local_addr().unwrap(),
+                self.socket.local_addr()?,
                 *to,
                 file_path.to_path_buf(),
                 options.to_vec(),
