@@ -8,6 +8,7 @@
 //! - [RFC 2348](https://www.rfc-editor.org/rfc/rfc2348) Blocksize Option
 //! - [RFC 2349](https://www.rfc-editor.org/rfc/rfc2349) Timeout Interval Option
 //! - [RFC 2349](https://www.rfc-editor.org/rfc/rfc2349) Transfer Size Option
+//! - [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize Option
 //!
 //! # Security
 //!
@@ -19,6 +20,7 @@ mod convert;
 mod message;
 mod packet;
 mod server;
+mod window;
 mod worker;
 
 pub use config::Config;
@@ -30,4 +32,5 @@ pub use packet::OptionType;
 pub use packet::Packet;
 pub use packet::TransferOption;
 pub use server::Server;
+pub use window::Window;
 pub use worker::Worker;

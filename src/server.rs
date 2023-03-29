@@ -2,7 +2,7 @@ use crate::{Config, Message, Worker};
 use crate::{ErrorCode, Packet, TransferOption};
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Server `struct` is used for handling incoming TFTP requests.
 ///
@@ -79,11 +79,11 @@ impl Server {
     fn handle_rrq(
         &self,
         filename: String,
-        options: &mut Vec<TransferOption>,
+        options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(&filename);
-        match check_file_exists(&file_path, &self.directory) {
+        let file_path = &self.directory.join(filename);
+        match check_file_exists(file_path, &self.directory) {
             ErrorCode::FileNotFound => Message::send_error_to(
                 &self.socket,
                 to,
@@ -96,12 +96,15 @@ impl Server {
                 ErrorCode::AccessViolation,
                 "file access violation",
             ),
-            ErrorCode::FileExists => Ok(Worker::send(
-                self.socket.local_addr()?,
-                *to,
-                file_path.to_path_buf(),
-                options.to_vec(),
-            )),
+            ErrorCode::FileExists => {
+                Worker::send(
+                    self.socket.local_addr()?,
+                    *to,
+                    file_path.to_path_buf(),
+                    options.to_vec(),
+                );
+                Ok(())
+            }
             _ => Err("unexpected error code when checking file".into()),
         }
     }
@@ -109,11 +112,11 @@ impl Server {
     fn handle_wrq(
         &self,
         filename: String,
-        options: &mut Vec<TransferOption>,
+        options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(&filename);
-        match check_file_exists(&file_path, &self.directory) {
+        let file_path = &self.directory.join(filename);
+        match check_file_exists(file_path, &self.directory) {
             ErrorCode::FileExists => Message::send_error_to(
                 &self.socket,
                 to,
@@ -126,18 +129,21 @@ impl Server {
                 ErrorCode::AccessViolation,
                 "file access violation",
             ),
-            ErrorCode::FileNotFound => Ok(Worker::receive(
-                self.socket.local_addr()?,
-                *to,
-                file_path.to_path_buf(),
-                options.to_vec(),
-            )),
+            ErrorCode::FileNotFound => {
+                Worker::receive(
+                    self.socket.local_addr()?,
+                    *to,
+                    file_path.to_path_buf(),
+                    options.to_vec(),
+                );
+                Ok(())
+            }
             _ => Err("unexpected error code when checking file".into()),
         }
     }
 }
 
-fn check_file_exists(file: &PathBuf, directory: &PathBuf) -> ErrorCode {
+fn check_file_exists(file: &Path, directory: &PathBuf) -> ErrorCode {
     if !validate_file_path(file, directory) {
         return ErrorCode::AccessViolation;
     }
@@ -149,7 +155,7 @@ fn check_file_exists(file: &PathBuf, directory: &PathBuf) -> ErrorCode {
     ErrorCode::FileExists
 }
 
-fn validate_file_path(file: &PathBuf, directory: &PathBuf) -> bool {
+fn validate_file_path(file: &Path, directory: &PathBuf) -> bool {
     !file.to_str().unwrap().contains("..") && file.ancestors().any(|a| a == directory)
 }
 

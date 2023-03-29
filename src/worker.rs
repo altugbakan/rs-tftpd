@@ -180,7 +180,7 @@ fn receive_file(
                 }) => {
                     if received_block_number == block_number.wrapping_add(1) {
                         block_number = received_block_number;
-                        file.write(&data)?;
+                        file.write_all(&data)?;
                         size = data.len();
                         break;
                     }
@@ -216,7 +216,7 @@ fn accept_request(
     options: &Vec<TransferOption>,
     work_type: &WorkType,
 ) -> Result<(), Box<dyn Error>> {
-    if options.len() > 0 {
+    if !options.is_empty() {
         Message::send_oack(socket, options.to_vec())?;
     } else if *work_type == WorkType::Receive {
         Message::send_ack(socket, 0)?
@@ -226,13 +226,9 @@ fn accept_request(
 }
 
 fn check_response(socket: &UdpSocket) -> Result<(), Box<dyn Error>> {
-    if let Packet::Ack(received_block_number) = Message::recv(&socket)? {
+    if let Packet::Ack(received_block_number) = Message::recv(socket)? {
         if received_block_number != 0 {
-            Message::send_error(
-                &socket,
-                ErrorCode::IllegalOperation,
-                "invalid oack response",
-            )?;
+            Message::send_error(socket, ErrorCode::IllegalOperation, "invalid oack response")?;
         }
     }
 
