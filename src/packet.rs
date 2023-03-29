@@ -1,5 +1,5 @@
 use crate::Convert;
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, str::FromStr};
 
 /// Packet `enum` represents the valid TFTP packet types.
 ///
@@ -127,7 +127,7 @@ impl Opcode {
 
     /// Converts a [`u16`] to a [`u8`] array with 2 elements.
     pub const fn as_bytes(self) -> [u8; 2] {
-        return (self as u16).to_be_bytes();
+        (self as u16).to_be_bytes()
     }
 }
 
@@ -199,14 +199,18 @@ impl OptionType {
             OptionType::Timeout => "timeout",
         }
     }
+}
+
+impl FromStr for OptionType {
+    type Err = &'static str;
 
     /// Converts a [`str`] to an [`OptionType`].
-    pub fn from_str(value: &str) -> Result<Self, &'static str> {
+    fn from_str(value: &str) -> Result<Self, &'static str> {
         match value {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
-            _ => Err("Invalid option type".into()),
+            _ => Err("Invalid option type"),
         }
     }
 }
@@ -263,7 +267,7 @@ impl ErrorCode {
 
     /// Converts an [`ErrorCode`] to a [`u8`] array with 2 elements.
     pub fn as_bytes(self) -> [u8; 2] {
-        return (self as u16).to_be_bytes();
+        (self as u16).to_be_bytes()
     }
 }
 
@@ -360,7 +364,7 @@ fn serialize_error(code: &ErrorCode, msg: &String) -> Vec<u8> {
     [
         &Opcode::Error.as_bytes()[..],
         &code.as_bytes()[..],
-        &msg.as_bytes()[..],
+        msg.as_bytes(),
         &[0x00],
     ]
     .concat()
@@ -384,9 +388,9 @@ mod tests {
     fn parses_read_request() {
         let buf = [
             &Opcode::Rrq.as_bytes()[..],
-            &"test.png".as_bytes(),
+            ("test.png".as_bytes()),
             &[0x00],
-            &"octet".as_bytes(),
+            ("octet".as_bytes()),
             &[0x00],
         ]
         .concat();
@@ -409,17 +413,17 @@ mod tests {
     fn parses_read_request_with_options() {
         let buf = [
             &Opcode::Rrq.as_bytes()[..],
-            &"test.png".as_bytes(),
+            ("test.png".as_bytes()),
             &[0x00],
-            &"octet".as_bytes(),
+            ("octet".as_bytes()),
             &[0x00],
-            &OptionType::TransferSize.as_str().as_bytes(),
+            (OptionType::TransferSize.as_str().as_bytes()),
             &[0x00],
-            &"0".as_bytes(),
+            ("0".as_bytes()),
             &[0x00],
-            &OptionType::Timeout.as_str().as_bytes(),
+            (OptionType::Timeout.as_str().as_bytes()),
             &[0x00],
-            &"5".as_bytes(),
+            ("5".as_bytes()),
             &[0x00],
         ]
         .concat();
@@ -456,9 +460,9 @@ mod tests {
     fn parses_write_request() {
         let buf = [
             &Opcode::Wrq.as_bytes()[..],
-            &"test.png".as_bytes(),
+            ("test.png".as_bytes()),
             &[0x00],
-            &"octet".as_bytes(),
+            ("octet".as_bytes()),
             &[0x00],
         ]
         .concat();
@@ -481,17 +485,17 @@ mod tests {
     fn parses_write_request_with_options() {
         let buf = [
             &Opcode::Wrq.as_bytes()[..],
-            &"test.png".as_bytes(),
+            ("test.png".as_bytes()),
             &[0x00],
-            &"octet".as_bytes(),
+            ("octet".as_bytes()),
             &[0x00],
-            &OptionType::TransferSize.as_str().as_bytes(),
+            (OptionType::TransferSize.as_str().as_bytes()),
             &[0x00],
-            &"12341234".as_bytes(),
+            ("12341234".as_bytes()),
             &[0x00],
-            &OptionType::BlockSize.as_str().as_bytes(),
+            (OptionType::BlockSize.as_str().as_bytes()),
             &[0x00],
-            &"1024".as_bytes(),
+            ("1024".as_bytes()),
             &[0x00],
         ]
         .concat();

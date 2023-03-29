@@ -7,6 +7,7 @@ This server implements [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350), The T
 - [RFC 2348](https://www.rfc-editor.org/rfc/rfc2348) Blocksize Option
 - [RFC 2349](https://www.rfc-editor.org/rfc/rfc2349) Timeout Interval Option
 - [RFC 2349](https://www.rfc-editor.org/rfc/rfc2349) Transfer Size Option
+- [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize Option
 
 # Security
 
