@@ -231,7 +231,7 @@ fn check_response(socket: &UdpSocket) -> Result<(), Box<dyn Error>> {
             Message::send_error(
                 &socket,
                 ErrorCode::IllegalOperation,
-                "invalid oack response".to_string(),
+                "invalid oack response",
             )?;
         }
     }

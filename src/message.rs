@@ -55,11 +55,22 @@ impl Message {
     pub fn send_error(
         socket: &UdpSocket,
         code: ErrorCode,
-        msg: String,
+        msg: &str,
     ) -> Result<(), Box<dyn Error>> {
-        socket.send(&Packet::Error { code, msg }.serialize()?)?;
+        if socket
+            .send(
+                &Packet::Error {
+                    code,
+                    msg: msg.to_string(),
+                }
+                .serialize()?,
+            )
+            .is_err()
+        {
+            eprintln!("could not send an error message");
+        };
 
-        Ok(())
+        Err(msg.into())
     }
 
     /// Sends an error packet to the supplied [`SocketAddr`].
