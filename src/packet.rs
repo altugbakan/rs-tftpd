@@ -188,6 +188,8 @@ pub enum OptionType {
     TransferSize,
     /// Timeout option type
     Timeout,
+    /// Windowsize option type
+    Windowsize,
 }
 
 impl OptionType {
@@ -197,6 +199,7 @@ impl OptionType {
             OptionType::BlockSize => "blksize",
             OptionType::TransferSize => "tsize",
             OptionType::Timeout => "timeout",
+            OptionType::Windowsize => "windowsize",
         }
     }
 }

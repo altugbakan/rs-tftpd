@@ -20,14 +20,14 @@ use std::{collections::VecDeque, error::Error, fs::File, io::Read};
 /// ```
 pub struct Window {
     elements: VecDeque<Vec<u8>>,
-    size: usize,
+    size: u16,
     chunk_size: usize,
     file: File,
 }
 
 impl Window {
     /// Creates a new `Window` with the supplied size and chunk size.
-    pub fn new(size: usize, chunk_size: usize, file: File) -> Window {
+    pub fn new(size: u16, chunk_size: usize, file: File) -> Window {
         Window {
             elements: VecDeque::new(),
             size,
@@ -37,32 +37,48 @@ impl Window {
     }
 
     /// Fills the `Window` with chunks of data from the file.
-    pub fn fill(&mut self) -> Result<(), Box<dyn Error>> {
-        for _ in self.elements.len()..self.size {
+    /// Returns `true` if the `Window` is full.
+    pub fn fill(&mut self) -> Result<bool, Box<dyn Error>> {
+        for _ in self.len()..self.size {
             let mut chunk = vec![0; self.chunk_size];
             let size = self.file.read(&mut chunk)?;
 
             if size != self.chunk_size {
                 chunk.truncate(size);
                 self.elements.push_back(chunk);
-                break;
+                return Ok(false);
             }
 
             self.elements.push_back(chunk);
         }
 
-        Ok(())
+        Ok(true)
     }
 
     /// Removes the first `amount` of elements from the `Window`.
-    pub fn remove(&mut self, amount: usize) -> Result<(), Box<dyn Error>> {
-        if amount > self.elements.len() {
+    pub fn remove(&mut self, amount: u16) -> Result<(), Box<dyn Error>> {
+        if amount > self.len() {
             return Err("amount cannot be larger than size".into());
         }
 
-        drop(self.elements.drain(0..amount));
+        drop(self.elements.drain(0..amount as usize));
 
         Ok(())
+    }
+
+    /// Returns a reference to the `VecDeque` containing the elements.
+    pub fn get_elements(&self) -> &VecDeque<Vec<u8>> {
+        &self.elements
+    }
+
+    /// Returns the length of the `Window`.
+    pub fn len(&self) -> u16 {
+        self.elements.len() as u16
+    }
+
+    /// Returns `true` if the `Window` is empty.
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
     }
 }
 
