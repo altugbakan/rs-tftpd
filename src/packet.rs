@@ -177,7 +177,7 @@ impl TransferOption {
 /// ```rust
 /// use tftpd::OptionType;
 ///
-/// assert_eq!(OptionType::BlockSize, OptionType::from_str("blksize").unwrap());
+/// assert_eq!(OptionType::BlockSize, "blksize".parse().unwrap());
 /// assert_eq!("tsize", OptionType::TransferSize.as_str());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
