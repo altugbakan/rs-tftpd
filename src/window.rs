@@ -1,4 +1,9 @@
-use std::{collections::VecDeque, error::Error, fs::File, io::Read};
+use std::{
+    collections::VecDeque,
+    error::Error,
+    fs::File,
+    io::{Read, Write},
+};
 
 /// Window `struct` is used to store chunks of data from a file.
 /// It is used to store the data that is being sent or received for
@@ -55,13 +60,35 @@ impl Window {
         Ok(true)
     }
 
+    /// Empties the `Window` by writing the data to the file.
+    pub fn empty(&mut self) -> Result<(), Box<dyn Error>> {
+        for data in &self.elements {
+            self.file.write_all(data)?;
+        }
+
+        self.elements.clear();
+
+        Ok(())
+    }
+
     /// Removes the first `amount` of elements from the `Window`.
-    pub fn remove(&mut self, amount: u16) -> Result<(), Box<dyn Error>> {
+    pub fn remove(&mut self, amount: u16) -> Result<(), &'static str> {
         if amount > self.len() {
-            return Err("amount cannot be larger than size".into());
+            return Err("amount cannot be larger than length of window");
         }
 
         drop(self.elements.drain(0..amount as usize));
+
+        Ok(())
+    }
+
+    /// Adds a data `Vec<u8>` to the `Window`.
+    pub fn add(&mut self, data: Vec<u8>) -> Result<(), &'static str> {
+        if self.len() == self.size {
+            return Err("cannot add to a full window");
+        }
+
+        self.elements.push_back(data);
 
         Ok(())
     }
@@ -80,16 +107,32 @@ impl Window {
     pub fn is_empty(&self) -> bool {
         self.elements.is_empty()
     }
+
+    /// Returns `true` if the `Window` is full.
+    pub fn is_full(&self) -> bool {
+        self.elements.len() as u16 == self.size
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, io::Write};
+    use std::{
+        fs::{self, OpenOptions},
+        io::{Seek, Write},
+        path::Path,
+    };
+
+    const DIR_NAME: &str = "tmp";
 
     #[test]
     fn fills_and_removes_from_window() {
-        let file = initialize();
+        const FILE_NAME: &str = "fills_and_removes_from_window.txt";
+
+        let mut file = initialize(FILE_NAME);
+        file.write_all(b"Hello, world!").unwrap();
+        file.flush().unwrap();
+        file.rewind().unwrap();
 
         let mut window = Window::new(2, 5, file);
         window.fill().unwrap();
@@ -106,30 +149,65 @@ mod tests {
         assert_eq!(window.elements[0], b", wor"[..]);
         assert_eq!(window.elements[1], b"ld!"[..]);
 
-        clean();
+        clean(FILE_NAME);
     }
 
-    fn initialize() -> File {
-        let dir_name = "tmp";
-        let file_name = "tmp/test.txt";
+    #[test]
+    fn adds_to_and_empties_window() {
+        const FILE_NAME: &str = "adds_to_and_empties_window.txt";
 
-        if fs::metadata(dir_name).is_err() {
-            fs::create_dir(dir_name).unwrap();
-        }
+        let file = initialize(FILE_NAME);
 
-        if File::open(file_name).is_ok() {
-            fs::remove_file(file_name).unwrap();
-        }
+        let mut window = Window::new(3, 5, file);
+        window.add(b"Hello".to_vec()).unwrap();
+        assert_eq!(window.elements.len(), 1);
+        assert_eq!(window.elements[0], b"Hello"[..]);
 
-        let mut file = File::create(file_name).unwrap();
-        file.write_all(b"Hello, world!").unwrap();
-        file.flush().unwrap();
+        window.add(b", wor".to_vec()).unwrap();
+        assert_eq!(window.elements.len(), 2);
+        assert_eq!(window.elements[0], b"Hello"[..]);
+        assert_eq!(window.elements[1], b", wor"[..]);
 
-        File::open(file_name).unwrap()
+        window.add(b"ld!".to_vec()).unwrap();
+        assert_eq!(window.elements.len(), 3);
+        assert_eq!(window.elements[0], b"Hello"[..]);
+        assert_eq!(window.elements[1], b", wor"[..]);
+        assert_eq!(window.elements[2], b"ld!"[..]);
+
+        window.empty().unwrap();
+        assert_eq!(window.elements.len(), 0);
+
+        let mut contents = Default::default();
+        File::read_to_string(
+            &mut File::open(DIR_NAME.to_string() + "/" + FILE_NAME).unwrap(),
+            &mut contents,
+        )
+        .unwrap();
+        assert_eq!(contents, "Hello, world!");
+
+        clean(FILE_NAME);
     }
 
-    fn clean() {
-        fs::remove_file("tmp/test.txt").unwrap();
-        fs::remove_dir("tmp").unwrap();
+    fn initialize(file_name: &str) -> File {
+        let file_name = DIR_NAME.to_string() + "/" + file_name;
+        if !Path::new(DIR_NAME).is_dir() {
+            fs::create_dir(DIR_NAME).unwrap();
+        }
+
+        if File::open(&file_name).is_ok() {
+            fs::remove_file(&file_name).unwrap();
+        }
+
+        OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(&file_name)
+            .unwrap()
+    }
+
+    fn clean(file_name: &str) {
+        let file_name = DIR_NAME.to_string() + "/" + file_name;
+        fs::remove_file(file_name).unwrap();
     }
 }

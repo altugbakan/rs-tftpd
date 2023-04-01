@@ -1,7 +1,6 @@
 use std::{
     error::Error,
     fs::{self, File},
-    io::Write,
     net::{SocketAddr, UdpSocket},
     path::PathBuf,
     thread,
@@ -101,7 +100,7 @@ impl Worker {
                 let worker_options = parse_options(&mut options, &work_type)?;
 
                 accept_request(&socket, &options, &work_type)?;
-                receive_file(&socket, &mut File::create(&file_path)?, &worker_options)?;
+                receive_file(&socket, File::create(&file_path)?, &worker_options)?;
 
                 Ok(())
             };
@@ -135,6 +134,7 @@ fn send_file(
 ) -> Result<(), Box<dyn Error>> {
     let mut block_number = 1;
     let mut window = Window::new(worker_options.windowsize, worker_options.blk_size, file);
+
     loop {
         let filled = window.fill()?;
 
@@ -177,14 +177,16 @@ fn send_file(
 
 fn receive_file(
     socket: &UdpSocket,
-    file: &mut File,
+    file: File,
     worker_options: &WorkerOptions,
 ) -> Result<(), Box<dyn Error>> {
     let mut block_number: u16 = 0;
-    loop {
-        let size;
+    let mut window = Window::new(worker_options.windowsize, worker_options.blk_size, file);
 
+    loop {
+        let mut size;
         let mut retry_cnt = 0;
+
         loop {
             match Message::recv_packet_with_size(socket, worker_options.blk_size) {
                 Ok(Packet::Data {
@@ -193,9 +195,16 @@ fn receive_file(
                 }) => {
                     if received_block_number == block_number.wrapping_add(1) {
                         block_number = received_block_number;
-                        file.write_all(&data)?;
                         size = data.len();
-                        break;
+                        window.add(data)?;
+
+                        if size < worker_options.blk_size {
+                            break;
+                        }
+
+                        if window.is_full() {
+                            break;
+                        }
                     }
                 }
                 Ok(Packet::Error { code, msg }) => {
@@ -210,6 +219,7 @@ fn receive_file(
             }
         }
 
+        window.empty()?;
         Message::send_ack(socket, block_number)?;
         if size < worker_options.blk_size {
             break;
