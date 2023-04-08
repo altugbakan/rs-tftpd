@@ -9,15 +9,15 @@ This server implements [RFC 1350](https://www.rfc-editor.org/rfc/rfc1350), The T
 - [RFC 2349](https://www.rfc-editor.org/rfc/rfc2349) Transfer Size Option
 - [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize Option
 
-# Security
+## Security
 
 Since TFTP servers do not offer any type of login or access control mechanisms, this server only allows transfer and receiving inside a chosen folder, and disallows external file access.
 
-# Documentation
+## Documentation
 
 Documentation for the project can be found in [docs.rs](https://docs.rs/tftpd/latest/tftpd/).
 
-# Usage
+## Usage
 
 To install the server using Cargo:
 
@@ -32,6 +32,6 @@ To run the server on the IP address `0.0.0.0`, port `1234` in the `/home/user/tf
 tftpd -i 0.0.0.0 -p 1234 -d "/home/user/tftp"
 ```
 
-# License
+## License
 
 This project is licensed under the [MIT License](https://opensource.org/license/mit/).
