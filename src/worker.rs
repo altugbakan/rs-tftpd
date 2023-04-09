@@ -47,6 +47,7 @@ enum WorkType {
 
 const MAX_RETRIES: u32 = 6;
 const DEFAULT_TIMEOUT_SECS: u64 = 5;
+const TIMEOUT_BUFFER_SECS: u64 = 1;
 const DEFAULT_BLOCK_SIZE: usize = 512;
 
 impl Worker {
@@ -139,7 +140,8 @@ fn send_file(
         let filled = window.fill()?;
 
         let mut retry_cnt = 0;
-        let mut time = SystemTime::now() - Duration::from_secs(DEFAULT_TIMEOUT_SECS);
+        let mut time =
+            SystemTime::now() - Duration::from_secs(DEFAULT_TIMEOUT_SECS + TIMEOUT_BUFFER_SECS);
         loop {
             if time.elapsed()? >= Duration::from_secs(DEFAULT_TIMEOUT_SECS) {
                 send_window(socket, &window, block_number)?;

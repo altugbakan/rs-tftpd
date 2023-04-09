@@ -37,7 +37,7 @@ impl Config {
         let mut config = Config {
             ip_address: Ipv4Addr::new(127, 0, 0, 1),
             port: 69,
-            directory: env::current_dir().unwrap_or(env::temp_dir()),
+            directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
         };
 
         args.next();

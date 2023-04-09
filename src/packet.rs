@@ -213,6 +213,7 @@ impl FromStr for OptionType {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
+            "windowsize" => Ok(OptionType::Windowsize),
             _ => Err("Invalid option type"),
         }
     }
@@ -304,7 +305,7 @@ fn parse_rq(buf: &[u8], opcode: Opcode) -> Result<Packet, Box<dyn Error>> {
         (option, zero_index) = Convert::to_string(buf, zero_index + 1)?;
         (value, zero_index) = Convert::to_string(buf, zero_index + 1)?;
 
-        if let Ok(option) = OptionType::from_str(option.as_str()) {
+        if let Ok(option) = OptionType::from_str(option.to_lowercase().as_str()) {
             options.push(TransferOption {
                 option,
                 value: value.parse()?,
@@ -428,6 +429,10 @@ mod tests {
             &[0x00],
             ("5".as_bytes()),
             &[0x00],
+            (OptionType::Windowsize.as_str().as_bytes()),
+            &[0x00],
+            ("4".as_bytes()),
+            &[0x00],
         ]
         .concat();
 
@@ -439,7 +444,7 @@ mod tests {
         {
             assert_eq!(filename, "test.png");
             assert_eq!(mode, "octet");
-            assert_eq!(options.len(), 2);
+            assert_eq!(options.len(), 3);
             assert_eq!(
                 options[0],
                 TransferOption {
@@ -452,6 +457,13 @@ mod tests {
                 TransferOption {
                     option: OptionType::Timeout,
                     value: 5
+                }
+            );
+            assert_eq!(
+                options[2],
+                TransferOption {
+                    option: OptionType::Windowsize,
+                    value: 4
                 }
             );
         } else {
