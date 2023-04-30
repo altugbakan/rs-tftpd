@@ -190,7 +190,7 @@ fn receive_file(
         let mut retry_cnt = 0;
 
         loop {
-            match Message::recv_packet_with_size(socket, worker_options.blk_size) {
+            match Message::recv_with_size(socket, worker_options.blk_size) {
                 Ok(Packet::Data {
                     block_num: received_block_number,
                     data,

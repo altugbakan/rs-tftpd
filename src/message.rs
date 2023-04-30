@@ -109,7 +109,7 @@ impl Message {
 
     /// Receives a packet from the socket's connected remote, and returns the
     /// parsed [`Packet`]. This function cannot handle large data packets due to
-    /// the limited buffer size. For handling data packets, see [`Message::recv_data()`].
+    /// the limited buffer size. For handling data packets, see [`Message::recv_with_size()`].
     pub fn recv(socket: &UdpSocket) -> Result<Packet, Box<dyn Error>> {
         let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
         let number_of_bytes = socket.recv(&mut buf)?;
@@ -121,7 +121,7 @@ impl Message {
     /// Receives a packet from any incoming remote request, and returns the
     /// parsed [`Packet`] and the requesting [`SocketAddr`]. This function cannot handle
     /// large data packets due to the limited buffer size, so it is intended for
-    /// only accepting incoming requests.
+    /// only accepting incoming requests. For handling data packets, see [`Message::recv_with_size()`].
     pub fn recv_from(socket: &UdpSocket) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
         let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
         let (number_of_bytes, from) = socket.recv_from(&mut buf)?;
@@ -133,10 +133,7 @@ impl Message {
     /// Receives a data packet from the socket's connected remote, and returns the
     /// parsed [`Packet`]. The received packet can actually be of any type, however,
     /// this function also allows supplying the buffer size for an incoming request.
-    pub fn recv_packet_with_size(
-        socket: &UdpSocket,
-        size: usize,
-    ) -> Result<Packet, Box<dyn Error>> {
+    pub fn recv_with_size(socket: &UdpSocket, size: usize) -> Result<Packet, Box<dyn Error>> {
         let mut buf = vec![0; size + 4];
         let number_of_bytes = socket.recv(&mut buf)?;
         let packet = Packet::deserialize(&buf[..number_of_bytes])?;
