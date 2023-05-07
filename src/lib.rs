@@ -20,6 +20,7 @@ mod convert;
 mod message;
 mod packet;
 mod server;
+mod socket;
 mod window;
 mod worker;
 
@@ -32,5 +33,7 @@ pub use packet::OptionType;
 pub use packet::Packet;
 pub use packet::TransferOption;
 pub use server::Server;
+pub use socket::ServerSocket;
+pub use socket::Socket;
 pub use window::Window;
 pub use worker::Worker;

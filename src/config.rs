@@ -25,6 +25,8 @@ pub struct Config {
     pub port: u16,
     /// Default directory of the TFTP Server. (default: current working directory)
     pub directory: PathBuf,
+    /// Use a single port for both sending and receiving. (default: false)
+    pub single_port: bool,
 }
 
 impl Config {
@@ -38,6 +40,7 @@ impl Config {
             ip_address: Ipv4Addr::new(127, 0, 0, 1),
             port: 69,
             directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
+            single_port: false,
         };
 
         args.next();
@@ -68,6 +71,9 @@ impl Config {
                         return Err("Missing directory after flag".into());
                     }
                 }
+                "-s" | "--single-port" => {
+                    config.single_port = true;
+                }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
@@ -77,6 +83,7 @@ impl Config {
                         "  -p, --port <PORT>\t\tSet the listening port of the server (default: 69)"
                     );
                     println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
+                    println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -97,7 +104,7 @@ mod tests {
     #[test]
     fn parses_full_config() {
         let config = Config::new(
-            vec!["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/"]
+            vec!["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -106,6 +113,7 @@ mod tests {
         assert_eq!(config.ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 1234);
         assert_eq!(config.directory, PathBuf::from_str("/").unwrap());
+        assert!(config.single_port);
     }
 
     #[test]

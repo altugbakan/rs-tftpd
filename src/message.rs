@@ -1,9 +1,6 @@
-use std::{
-    error::Error,
-    net::{SocketAddr, UdpSocket},
-};
+use std::{error::Error, net::SocketAddr};
 
-use crate::{ErrorCode, Packet, TransferOption};
+use crate::{ErrorCode, Packet, Socket, TransferOption};
 
 /// Message `struct` is used for easy message transmission of common TFTP
 /// message types.
@@ -30,41 +27,34 @@ impl Message {
     /// Sends a data packet to the socket's connected remote. See
     /// [`UdpSocket`] for more information about connected
     /// sockets.
-    pub fn send_data(
-        socket: &UdpSocket,
+    pub fn send_data<T: Socket>(
+        socket: &T,
         block_num: u16,
         data: Vec<u8>,
     ) -> Result<(), Box<dyn Error>> {
-        socket.send(&Packet::Data { block_num, data }.serialize()?)?;
-
-        Ok(())
+        socket.send(&Packet::Data { block_num, data })
     }
 
     /// Sends an acknowledgement packet to the socket's connected remote. See
     /// [`UdpSocket`] for more information about connected
     /// sockets.
-    pub fn send_ack(socket: &UdpSocket, block_number: u16) -> Result<(), Box<dyn Error>> {
-        socket.send(&Packet::Ack(block_number).serialize()?)?;
-
-        Ok(())
+    pub fn send_ack<T: Socket>(socket: &T, block_number: u16) -> Result<(), Box<dyn Error>> {
+        socket.send(&Packet::Ack(block_number))
     }
 
     /// Sends an error packet to the socket's connected remote. See
     /// [`UdpSocket`] for more information about connected
     /// sockets.
-    pub fn send_error(
-        socket: &UdpSocket,
+    pub fn send_error<T: Socket>(
+        socket: &T,
         code: ErrorCode,
         msg: &str,
     ) -> Result<(), Box<dyn Error>> {
         if socket
-            .send(
-                &Packet::Error {
-                    code,
-                    msg: msg.to_string(),
-                }
-                .serialize()?,
-            )
+            .send(&Packet::Error {
+                code,
+                msg: msg.to_string(),
+            })
             .is_err()
         {
             eprintln!("could not send an error message");
@@ -74,8 +64,8 @@ impl Message {
     }
 
     /// Sends an error packet to the supplied [`SocketAddr`].
-    pub fn send_error_to(
-        socket: &UdpSocket,
+    pub fn send_error_to<T: Socket>(
+        socket: &T,
         to: &SocketAddr,
         code: ErrorCode,
         msg: &str,
@@ -85,8 +75,7 @@ impl Message {
                 &Packet::Error {
                     code,
                     msg: msg.to_string(),
-                }
-                .serialize()?,
+                },
                 to,
             )
             .is_err()
@@ -98,46 +87,47 @@ impl Message {
 
     /// Sends an option acknowledgement packet to the socket's connected remote.
     /// See [`UdpSocket`] for more information about connected sockets.
-    pub fn send_oack(
-        socket: &UdpSocket,
+    pub fn send_oack<T: Socket>(
+        socket: &T,
         options: Vec<TransferOption>,
     ) -> Result<(), Box<dyn Error>> {
-        socket.send(&Packet::Oack(options).serialize()?)?;
-
-        Ok(())
+        socket.send(&Packet::Oack(options))
     }
 
     /// Receives a packet from the socket's connected remote, and returns the
     /// parsed [`Packet`]. This function cannot handle large data packets due to
     /// the limited buffer size. For handling data packets, see [`Message::recv_with_size()`].
-    pub fn recv(socket: &UdpSocket) -> Result<Packet, Box<dyn Error>> {
+    pub fn recv<T: Socket>(socket: &T) -> Result<Packet, Box<dyn Error>> {
         let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
-        let number_of_bytes = socket.recv(&mut buf)?;
-        let packet = Packet::deserialize(&buf[..number_of_bytes])?;
-
-        Ok(packet)
+        socket.recv(&mut buf)
     }
 
     /// Receives a packet from any incoming remote request, and returns the
     /// parsed [`Packet`] and the requesting [`SocketAddr`]. This function cannot handle
     /// large data packets due to the limited buffer size, so it is intended for
     /// only accepting incoming requests. For handling data packets, see [`Message::recv_with_size()`].
-    pub fn recv_from(socket: &UdpSocket) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+    pub fn recv_from<T: Socket>(socket: &T) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
         let mut buf = [0; MAX_REQUEST_PACKET_SIZE];
-        let (number_of_bytes, from) = socket.recv_from(&mut buf)?;
-        let packet = Packet::deserialize(&buf[..number_of_bytes])?;
-
-        Ok((packet, from))
+        socket.recv_from(&mut buf)
     }
 
     /// Receives a data packet from the socket's connected remote, and returns the
     /// parsed [`Packet`]. The received packet can actually be of any type, however,
     /// this function also allows supplying the buffer size for an incoming request.
-    pub fn recv_with_size(socket: &UdpSocket, size: usize) -> Result<Packet, Box<dyn Error>> {
+    pub fn recv_with_size<T: Socket>(socket: &T, size: usize) -> Result<Packet, Box<dyn Error>> {
         let mut buf = vec![0; size + 4];
-        let number_of_bytes = socket.recv(&mut buf)?;
-        let packet = Packet::deserialize(&buf[..number_of_bytes])?;
+        socket.recv(&mut buf)
+    }
 
-        Ok(packet)
+    /// Receives a data packet from any incoming remote request, and returns the
+    /// parsed [`Packet`] and the requesting [`SocketAddr`]. The received packet can
+    /// actually be of any type, however, this function also allows supplying the
+    /// buffer size for an incoming request.
+    pub fn recv_from_with_size<T: Socket>(
+        socket: &T,
+        size: usize,
+    ) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        let mut buf = vec![0; size + 4];
+        socket.recv_from(&mut buf)
     }
 }

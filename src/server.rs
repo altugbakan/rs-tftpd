@@ -1,8 +1,16 @@
-use crate::{Config, Message, Worker};
+use crate::{Config, Message, OptionType, ServerSocket, Socket, Worker};
 use crate::{ErrorCode, Packet, TransferOption};
+use std::cmp::max;
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
+use std::time::Duration;
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_BLOCK_SIZE: usize = 512;
+const DEFAULT_WINDOW_SIZE: u16 = 1;
 
 /// Server `struct` is used for handling incoming TFTP requests.
 ///
@@ -22,6 +30,9 @@ use std::path::{Path, PathBuf};
 pub struct Server {
     socket: UdpSocket,
     directory: PathBuf,
+    single_port: bool,
+    largest_block_size: usize,
+    clients: HashMap<SocketAddr, Sender<Packet>>,
 }
 
 impl Server {
@@ -32,15 +43,24 @@ impl Server {
         let server = Server {
             socket,
             directory: config.directory.clone(),
+            single_port: config.single_port,
+            largest_block_size: DEFAULT_BLOCK_SIZE,
+            clients: HashMap::new(),
         };
 
         Ok(server)
     }
 
     /// Starts listening for connections. Note that this function does not finish running until termination.
-    pub fn listen(&self) {
+    pub fn listen(&mut self) {
         loop {
-            if let Ok((packet, from)) = Message::recv_from(&self.socket) {
+            let received = if self.single_port {
+                Message::recv_from_with_size(&self.socket, self.largest_block_size)
+            } else {
+                Message::recv_from(&self.socket)
+            };
+
+            if let Ok((packet, from)) = received {
                 match packet {
                     Packet::Rrq {
                         filename,
@@ -63,13 +83,15 @@ impl Server {
                         }
                     }
                     _ => {
-                        Message::send_error_to(
-                            &self.socket,
-                            &from,
-                            ErrorCode::IllegalOperation,
-                            "invalid request",
-                        )
-                        .unwrap_or_else(|_| eprintln!("Received invalid request"));
+                        if self.route_packet(packet, &from).is_err() {
+                            Message::send_error_to(
+                                &self.socket,
+                                &from,
+                                ErrorCode::IllegalOperation,
+                                "invalid request",
+                            )
+                            .unwrap_or_else(|_| eprintln!("Received invalid request"));
+                        }
                     }
                 };
             }
@@ -77,7 +99,7 @@ impl Server {
     }
 
     fn handle_rrq(
-        &self,
+        &mut self,
         filename: String,
         options: &mut [TransferOption],
         to: &SocketAddr,
@@ -97,25 +119,63 @@ impl Server {
                 "file access violation",
             ),
             ErrorCode::FileExists => {
-                Worker::send(
-                    self.socket.local_addr()?,
-                    *to,
-                    file_path.to_path_buf(),
-                    options.to_vec(),
-                );
-                Ok(())
+                let worker_options =
+                    parse_options(options, RequestType::Read(file_path.metadata()?.len()))?;
+
+                if self.single_port {
+                    let mut socket = create_single_socket(&self.socket, to)?;
+                    socket.set_read_timeout(worker_options.timeout)?;
+                    socket.set_write_timeout(worker_options.timeout)?;
+
+                    self.clients.insert(*to, socket.sender());
+                    self.largest_block_size =
+                        max(self.largest_block_size, worker_options.block_size);
+                    accept_request(
+                        &socket,
+                        options,
+                        RequestType::Read(file_path.metadata()?.len()),
+                    )?;
+
+                    let worker = Worker::new(
+                        socket,
+                        file_path.clone(),
+                        worker_options.block_size,
+                        worker_options.timeout,
+                        worker_options.window_size,
+                    );
+                    worker.send()
+                } else {
+                    let socket = create_multi_socket(&self.socket.local_addr()?, to)?;
+                    socket.set_read_timeout(Some(worker_options.timeout))?;
+                    socket.set_write_timeout(Some(worker_options.timeout))?;
+
+                    accept_request(
+                        &socket,
+                        options,
+                        RequestType::Read(file_path.metadata()?.len()),
+                    )?;
+
+                    let worker = Worker::new(
+                        socket,
+                        file_path.clone(),
+                        worker_options.block_size,
+                        worker_options.timeout,
+                        worker_options.window_size,
+                    );
+                    worker.send()
+                }
             }
-            _ => Err("unexpected error code when checking file".into()),
+            _ => Err("Unexpected error code when checking file".into()),
         }
     }
 
     fn handle_wrq(
-        &self,
-        filename: String,
+        &mut self,
+        file_name: String,
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(filename);
+        let file_path = &self.directory.join(file_name);
         match check_file_exists(file_path, &self.directory) {
             ErrorCode::FileExists => Message::send_error_to(
                 &self.socket,
@@ -130,17 +190,159 @@ impl Server {
                 "file access violation",
             ),
             ErrorCode::FileNotFound => {
-                Worker::receive(
-                    self.socket.local_addr()?,
-                    *to,
-                    file_path.to_path_buf(),
-                    options.to_vec(),
-                );
-                Ok(())
+                let worker_options = parse_options(options, RequestType::Write)?;
+
+                if self.single_port {
+                    let mut socket = create_single_socket(&self.socket, to)?;
+                    socket.set_read_timeout(worker_options.timeout)?;
+                    socket.set_write_timeout(worker_options.timeout)?;
+
+                    self.clients.insert(*to, socket.sender());
+                    self.largest_block_size =
+                        max(self.largest_block_size, worker_options.block_size);
+                    accept_request(&socket, options, RequestType::Write)?;
+
+                    let worker = Worker::new(
+                        socket,
+                        file_path.clone(),
+                        worker_options.block_size,
+                        worker_options.timeout,
+                        worker_options.window_size,
+                    );
+                    worker.receive()
+                } else {
+                    let socket = create_multi_socket(&self.socket.local_addr()?, to)?;
+                    socket.set_read_timeout(Some(worker_options.timeout))?;
+                    socket.set_write_timeout(Some(worker_options.timeout))?;
+
+                    accept_request(&socket, options, RequestType::Write)?;
+
+                    let worker = Worker::new(
+                        socket,
+                        file_path.clone(),
+                        worker_options.block_size,
+                        worker_options.timeout,
+                        worker_options.window_size,
+                    );
+                    worker.receive()
+                }
             }
-            _ => Err("unexpected error code when checking file".into()),
+            _ => Err("Unexpected error code when checking file".into()),
         }
     }
+
+    fn route_packet(&self, packet: Packet, to: &SocketAddr) -> Result<(), Box<dyn Error>> {
+        if self.clients.contains_key(to) {
+            self.clients[to].send(packet)?;
+            Ok(())
+        } else {
+            Err("No client found for packet".into())
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct WorkerOptions {
+    block_size: usize,
+    transfer_size: u64,
+    timeout: Duration,
+    window_size: u16,
+}
+
+#[derive(Debug, PartialEq)]
+enum RequestType {
+    Read(u64),
+    Write,
+}
+
+fn parse_options(
+    options: &mut [TransferOption],
+    request_type: RequestType,
+) -> Result<WorkerOptions, &'static str> {
+    let mut worker_options = WorkerOptions {
+        block_size: DEFAULT_BLOCK_SIZE,
+        transfer_size: 0,
+        timeout: DEFAULT_TIMEOUT,
+        window_size: DEFAULT_WINDOW_SIZE,
+    };
+
+    for option in options {
+        let TransferOption {
+            option: option_type,
+            value,
+        } = option;
+
+        match option_type {
+            OptionType::BlockSize => worker_options.block_size = *value,
+            OptionType::TransferSize => match request_type {
+                RequestType::Read(size) => {
+                    *value = size as usize;
+                    worker_options.transfer_size = size;
+                }
+                RequestType::Write => worker_options.transfer_size = *value as u64,
+            },
+            OptionType::Timeout => {
+                if *value == 0 {
+                    return Err("Invalid timeout value");
+                }
+                worker_options.timeout = Duration::from_secs(*value as u64);
+            }
+            OptionType::Windowsize => {
+                if *value == 0 || *value > u16::MAX as usize {
+                    return Err("Invalid windowsize value");
+                }
+                worker_options.window_size = *value as u16;
+            }
+        }
+    }
+
+    Ok(worker_options)
+}
+
+fn create_single_socket(
+    socket: &UdpSocket,
+    remote: &SocketAddr,
+) -> Result<ServerSocket, Box<dyn Error>> {
+    let socket = ServerSocket::new(socket.try_clone()?, *remote);
+
+    Ok(socket)
+}
+
+fn create_multi_socket(
+    addr: &SocketAddr,
+    remote: &SocketAddr,
+) -> Result<UdpSocket, Box<dyn Error>> {
+    let socket = UdpSocket::bind(SocketAddr::from((addr.ip(), 0)))?;
+    socket.connect(remote)?;
+
+    Ok(socket)
+}
+
+fn accept_request<T: Socket>(
+    socket: &T,
+    options: &[TransferOption],
+    request_type: RequestType,
+) -> Result<(), Box<dyn Error>> {
+    if !options.is_empty() {
+        Message::send_oack(socket, options.to_vec())?;
+        if let RequestType::Read(_) = request_type {
+            check_response(socket)?;
+        }
+    } else if request_type == RequestType::Write {
+        Message::send_ack(socket, 0)?
+    }
+
+    Ok(())
+}
+
+fn check_response<T: Socket>(socket: &T) -> Result<(), Box<dyn Error>> {
+    if let Packet::Ack(received_block_number) = Message::recv(socket)? {
+        if received_block_number != 0 {
+            Message::send_error(socket, ErrorCode::IllegalOperation, "invalid oack response")?;
+        }
+    }
+
+    Ok(())
 }
 
 fn check_file_exists(file: &Path, directory: &PathBuf) -> ErrorCode {
@@ -184,5 +386,70 @@ mod tests {
             &PathBuf::from("/dir/test/../file"),
             &PathBuf::from("/dir/test")
         ));
+    }
+
+    #[test]
+    fn parses_write_options() {
+        let mut options = vec![
+            TransferOption {
+                option: OptionType::BlockSize,
+                value: 1024,
+            },
+            TransferOption {
+                option: OptionType::TransferSize,
+                value: 0,
+            },
+            TransferOption {
+                option: OptionType::Timeout,
+                value: 5,
+            },
+        ];
+
+        let work_type = RequestType::Read(12341234);
+
+        let worker_options = parse_options(&mut options, work_type).unwrap();
+
+        assert_eq!(options[0].value, worker_options.block_size);
+        assert_eq!(options[1].value, worker_options.transfer_size as usize);
+        assert_eq!(options[2].value as u64, worker_options.timeout.as_secs());
+    }
+
+    #[test]
+    fn parses_read_options() {
+        let mut options = vec![
+            TransferOption {
+                option: OptionType::BlockSize,
+                value: 1024,
+            },
+            TransferOption {
+                option: OptionType::TransferSize,
+                value: 44554455,
+            },
+            TransferOption {
+                option: OptionType::Timeout,
+                value: 5,
+            },
+        ];
+
+        let work_type = RequestType::Write;
+
+        let worker_options = parse_options(&mut options, work_type).unwrap();
+
+        assert_eq!(options[0].value, worker_options.block_size);
+        assert_eq!(options[1].value, worker_options.transfer_size as usize);
+        assert_eq!(options[2].value as u64, worker_options.timeout.as_secs());
+    }
+
+    #[test]
+    fn parses_default_options() {
+        assert_eq!(
+            parse_options(&mut [], RequestType::Write).unwrap(),
+            WorkerOptions {
+                block_size: DEFAULT_BLOCK_SIZE,
+                transfer_size: 0,
+                timeout: DEFAULT_TIMEOUT,
+                window_size: DEFAULT_WINDOW_SIZE,
+            }
+        );
     }
 }

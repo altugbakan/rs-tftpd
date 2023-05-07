@@ -7,7 +7,7 @@ fn main() {
         process::exit(1)
     });
 
-    let server = Server::new(&config).unwrap_or_else(|err| {
+    let mut server = Server::new(&config).unwrap_or_else(|err| {
         eprintln!(
             "Problem creating server on {}:{}: {err}",
             config.ip_address, config.port
