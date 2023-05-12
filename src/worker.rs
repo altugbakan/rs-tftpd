@@ -1,3 +1,4 @@
+use crate::{Packet, Socket, Window};
 use std::{
     error::Error,
     fs::{self, File},
@@ -5,8 +6,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-
-use crate::{Message, Packet, Socket, Window};
 
 const MAX_RETRIES: u32 = 6;
 const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
@@ -141,7 +140,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     time = Instant::now();
                 }
 
-                match Message::recv(&self.socket) {
+                match self.socket.recv() {
                     Ok(Packet::Ack(received_block_number)) => {
                         let diff = received_block_number.wrapping_sub(block_number);
                         if diff <= self.windowsize {
@@ -181,7 +180,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             let mut retry_cnt = 0;
 
             loop {
-                match Message::recv_with_size(&self.socket, self.blk_size) {
+                match self.socket.recv_with_size(self.blk_size) {
                     Ok(Packet::Data {
                         block_num: received_block_number,
                         data,
@@ -215,7 +214,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             }
 
             window.empty()?;
-            Message::send_ack(&self.socket, block_number)?;
+            self.socket.send(&Packet::Ack(block_number))?;
             if size < self.blk_size {
                 break;
             };
@@ -231,7 +230,10 @@ fn send_window<T: Socket>(
     mut block_num: u16,
 ) -> Result<(), Box<dyn Error>> {
     for frame in window.get_elements() {
-        Message::send_data(socket, block_num, frame.to_vec())?;
+        socket.send(&Packet::Data {
+            block_num,
+            data: frame.to_vec(),
+        })?;
         block_num = block_num.wrapping_add(1);
     }
 

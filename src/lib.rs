@@ -17,7 +17,6 @@
 
 mod config;
 mod convert;
-mod message;
 mod packet;
 mod server;
 mod socket;
@@ -26,7 +25,6 @@ mod worker;
 
 pub use config::Config;
 pub use convert::Convert;
-pub use message::Message;
 pub use packet::ErrorCode;
 pub use packet::Opcode;
 pub use packet::OptionType;

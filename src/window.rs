@@ -206,10 +206,12 @@ mod tests {
             .unwrap()
     }
 
-    #[allow(unused_must_use)]
     fn clean(file_name: &str) {
         let file_name = DIR_NAME.to_string() + "/" + file_name;
         fs::remove_file(file_name).unwrap();
-        fs::remove_dir(DIR_NAME);
+        if fs::remove_dir(DIR_NAME).is_err() {
+            // ignore removing directory, as other tests are
+            // still running
+        }
     }
 }

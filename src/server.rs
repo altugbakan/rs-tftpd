@@ -1,4 +1,4 @@
-use crate::{Config, Message, OptionType, ServerSocket, Socket, Worker};
+use crate::{Config, OptionType, ServerSocket, Socket, Worker};
 use crate::{ErrorCode, Packet, TransferOption};
 use std::cmp::max;
 use std::collections::HashMap;
@@ -55,9 +55,9 @@ impl Server {
     pub fn listen(&mut self) {
         loop {
             let received = if self.single_port {
-                Message::recv_from_with_size(&self.socket, self.largest_block_size)
+                self.socket.recv_from_with_size(self.largest_block_size)
             } else {
-                Message::recv_from(&self.socket)
+                Socket::recv_from(&self.socket)
             };
 
             if let Ok((packet, from)) = received {
@@ -84,13 +84,19 @@ impl Server {
                     }
                     _ => {
                         if self.route_packet(packet, &from).is_err() {
-                            Message::send_error_to(
+                            if Socket::send_to(
                                 &self.socket,
+                                &Packet::Error {
+                                    code: ErrorCode::IllegalOperation,
+                                    msg: "invalid request".to_string(),
+                                },
                                 &from,
-                                ErrorCode::IllegalOperation,
-                                "invalid request",
                             )
-                            .unwrap_or_else(|_| eprintln!("Received invalid request"));
+                            .is_err()
+                            {
+                                eprintln!("Could not send error packet");
+                            };
+                            eprintln!("Received invalid request");
                         }
                     }
                 };
@@ -106,17 +112,21 @@ impl Server {
     ) -> Result<(), Box<dyn Error>> {
         let file_path = &self.directory.join(filename);
         match check_file_exists(file_path, &self.directory) {
-            ErrorCode::FileNotFound => Message::send_error_to(
+            ErrorCode::FileNotFound => Socket::send_to(
                 &self.socket,
+                &Packet::Error {
+                    code: ErrorCode::FileNotFound,
+                    msg: "file does not exist".to_string(),
+                },
                 to,
-                ErrorCode::FileNotFound,
-                "file does not exist",
             ),
-            ErrorCode::AccessViolation => Message::send_error_to(
+            ErrorCode::AccessViolation => Socket::send_to(
                 &self.socket,
+                &Packet::Error {
+                    code: ErrorCode::AccessViolation,
+                    msg: "file access violation".to_string(),
+                },
                 to,
-                ErrorCode::AccessViolation,
-                "file access violation",
             ),
             ErrorCode::FileExists => {
                 let worker_options =
@@ -164,17 +174,21 @@ impl Server {
     ) -> Result<(), Box<dyn Error>> {
         let file_path = &self.directory.join(file_name);
         match check_file_exists(file_path, &self.directory) {
-            ErrorCode::FileExists => Message::send_error_to(
+            ErrorCode::FileExists => Socket::send_to(
                 &self.socket,
+                &Packet::Error {
+                    code: ErrorCode::FileExists,
+                    msg: "requested file already exists".to_string(),
+                },
                 to,
-                ErrorCode::FileExists,
-                "requested file already exists",
             ),
-            ErrorCode::AccessViolation => Message::send_error_to(
+            ErrorCode::AccessViolation => Socket::send_to(
                 &self.socket,
+                &Packet::Error {
+                    code: ErrorCode::AccessViolation,
+                    msg: "file access violation".to_string(),
+                },
                 to,
-                ErrorCode::AccessViolation,
-                "file access violation",
             ),
             ErrorCode::FileNotFound => {
                 let worker_options = parse_options(options, RequestType::Write)?;
@@ -302,21 +316,24 @@ fn accept_request<T: Socket>(
     request_type: RequestType,
 ) -> Result<(), Box<dyn Error>> {
     if !options.is_empty() {
-        Message::send_oack(socket, options.to_vec())?;
+        socket.send(&Packet::Oack(options.to_vec()))?;
         if let RequestType::Read(_) = request_type {
             check_response(socket)?;
         }
     } else if request_type == RequestType::Write {
-        Message::send_ack(socket, 0)?
+        socket.send(&Packet::Ack(0))?;
     }
 
     Ok(())
 }
 
 fn check_response<T: Socket>(socket: &T) -> Result<(), Box<dyn Error>> {
-    if let Packet::Ack(received_block_number) = Message::recv(socket)? {
+    if let Packet::Ack(received_block_number) = socket.recv()? {
         if received_block_number != 0 {
-            Message::send_error(socket, ErrorCode::IllegalOperation, "invalid oack response")?;
+            socket.send(&Packet::Error {
+                code: ErrorCode::IllegalOperation,
+                msg: "invalid oack response".to_string(),
+            })?;
         }
     }
 

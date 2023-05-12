@@ -1,3 +1,4 @@
+use crate::Packet;
 use std::{
     error::Error,
     net::{SocketAddr, UdpSocket},
@@ -8,9 +9,8 @@ use std::{
     time::Duration,
 };
 
-use crate::Packet;
-
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_REQUEST_PACKET_SIZE: usize = 512;
 
 /// Socket `trait` is used to allow building custom sockets to be used for
 /// TFTP communication.
@@ -19,11 +19,29 @@ pub trait Socket: Send + Sync + 'static {
     fn send(&self, packet: &Packet) -> Result<(), Box<dyn Error>>;
     /// Sends a [`Packet`] to the specified remote [`Socket`].
     fn send_to(&self, packet: &Packet, to: &SocketAddr) -> Result<(), Box<dyn Error>>;
-    /// Receives a [`Packet`] from the socket's connected remote [`Socket`].
-    fn recv(&self, buf: &mut [u8]) -> Result<Packet, Box<dyn Error>>;
+    /// Receives a [`Packet`] from the socket's connected remote [`Socket`]. This
+    /// function cannot handle large data packets due to the limited buffer size,
+    /// so it is intended for only accepting incoming requests. For handling data
+    /// packets, see [`Socket::recv_with_size()`].
+    fn recv(&self) -> Result<Packet, Box<dyn Error>> {
+        self.recv_with_size(MAX_REQUEST_PACKET_SIZE)
+    }
+    /// Receives a data packet from the socket's connected remote, and returns the
+    /// parsed [`Packet`]. The received packet can actually be of any type, however,
+    /// this function also allows supplying the buffer size for an incoming request.
+    fn recv_with_size(&self, size: usize) -> Result<Packet, Box<dyn Error>>;
     /// Receives a [`Packet`] from any remote [`Socket`] and returns the [`SocketAddr`]
-    /// of the remote [`Socket`].
-    fn recv_from(&self, buf: &mut [u8]) -> Result<(Packet, SocketAddr), Box<dyn Error>>;
+    /// of the remote [`Socket`]. This function cannot handle large data packets
+    /// due to the limited buffer size, so it is intended for only accepting incoming
+    /// requests. For handling data packets, see [`Socket::recv_from_with_size()`].
+    fn recv_from(&self) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        self.recv_from_with_size(MAX_REQUEST_PACKET_SIZE)
+    }
+    /// Receives a data packet from any incoming remote request, and returns the
+    /// parsed [`Packet`] and the requesting [`SocketAddr`]. The received packet can
+    /// actually be of any type, however, this function also allows supplying the
+    /// buffer size for an incoming request.
+    fn recv_from_with_size(&self, size: usize) -> Result<(Packet, SocketAddr), Box<dyn Error>>;
     /// Returns the remote [`SocketAddr`] if it exists.
     fn remote_addr(&self) -> Result<SocketAddr, Box<dyn Error>>;
     /// Sets the read timeout for the [`Socket`].
@@ -45,15 +63,17 @@ impl Socket for UdpSocket {
         Ok(())
     }
 
-    fn recv(&self, buf: &mut [u8]) -> Result<Packet, Box<dyn Error>> {
-        let amt = self.recv(buf)?;
+    fn recv_with_size(&self, size: usize) -> Result<Packet, Box<dyn Error>> {
+        let mut buf = vec![0; size + 4];
+        let amt = self.recv(&mut buf)?;
         let packet = Packet::deserialize(&buf[..amt])?;
 
         Ok(packet)
     }
 
-    fn recv_from(&self, buf: &mut [u8]) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
-        let (amt, addr) = self.recv_from(buf)?;
+    fn recv_from_with_size(&self, size: usize) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        let mut buf = vec![0; size + 4];
+        let (amt, addr) = self.recv_from(&mut buf)?;
         let packet = Packet::deserialize(&buf[..amt])?;
 
         Ok((packet, addr))
@@ -112,7 +132,7 @@ impl Socket for ServerSocket {
         Ok(())
     }
 
-    fn recv(&self, _buf: &mut [u8]) -> Result<Packet, Box<dyn Error>> {
+    fn recv_with_size(&self, _size: usize) -> Result<Packet, Box<dyn Error>> {
         if let Ok(receiver) = self.receiver.lock() {
             if let Ok(packet) = receiver.recv_timeout(self.timeout) {
                 Ok(packet)
@@ -124,8 +144,8 @@ impl Socket for ServerSocket {
         }
     }
 
-    fn recv_from(&self, buf: &mut [u8]) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
-        Ok((self.recv(buf)?, self.remote))
+    fn recv_from_with_size(&self, _size: usize) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        Ok((self.recv()?, self.remote))
     }
 
     fn remote_addr(&self) -> Result<SocketAddr, Box<dyn Error>> {
@@ -173,12 +193,12 @@ impl<T: Socket + ?Sized> Socket for Box<T> {
         (**self).send_to(packet, to)
     }
 
-    fn recv(&self, buf: &mut [u8]) -> Result<Packet, Box<dyn Error>> {
-        (**self).recv(buf)
+    fn recv_with_size(&self, size: usize) -> Result<Packet, Box<dyn Error>> {
+        (**self).recv_with_size(size)
     }
 
-    fn recv_from(&self, buf: &mut [u8]) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
-        (**self).recv_from(buf)
+    fn recv_from_with_size(&self, size: usize) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        (**self).recv_from_with_size(size)
     }
 
     fn remote_addr(&self) -> Result<SocketAddr, Box<dyn Error>> {
@@ -209,7 +229,7 @@ mod tests {
 
         socket.sender.lock().unwrap().send(Packet::Ack(1)).unwrap();
 
-        let packet = socket.recv(&mut []).unwrap();
+        let packet = socket.recv().unwrap();
 
         assert_eq!(packet, Packet::Ack(1));
 
@@ -223,7 +243,7 @@ mod tests {
             })
             .unwrap();
 
-        let packet = socket.recv(&mut []).unwrap();
+        let packet = socket.recv().unwrap();
 
         assert_eq!(
             packet,
