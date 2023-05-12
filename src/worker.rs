@@ -28,7 +28,7 @@ const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
 /// socket.connect(SocketAddr::from_str("127.0.0.1:12345").unwrap()).unwrap();
 ///
 /// let worker = Worker::new(
-///     socket,
+///     Box::new(socket),
 ///     PathBuf::from_str("Cargo.toml").unwrap(),
 ///     512,
 ///     Duration::from_secs(1),
@@ -37,24 +37,18 @@ const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
 ///
 /// worker.send().unwrap();
 /// ```
-pub struct Worker<T>
-where
-    T: Socket,
-{
-    socket: T,
+pub struct Worker<T: Socket + ?Sized> {
+    socket: Box<T>,
     file_name: PathBuf,
     blk_size: usize,
     timeout: Duration,
     windowsize: u16,
 }
 
-impl<T> Worker<T>
-where
-    T: Socket,
-{
+impl<T: Socket + ?Sized> Worker<T> {
     /// Creates a new [`Worker`] with the supplied options.
     pub fn new(
-        socket: T,
+        socket: Box<T>,
         file_name: PathBuf,
         blk_size: usize,
         timeout: Duration,

@@ -32,10 +32,7 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration by parsing the supplied arguments. It is
     /// intended for use with [`env::args()`].
-    pub fn new<T>(mut args: T) -> Result<Config, Box<dyn Error>>
-    where
-        T: Iterator<Item = String>,
-    {
+    pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<Config, Box<dyn Error>> {
         let mut config = Config {
             ip_address: Ipv4Addr::new(127, 0, 0, 1),
             port: 69,

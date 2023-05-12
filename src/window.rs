@@ -5,9 +5,9 @@ use std::{
     io::{Read, Write},
 };
 
-/// Window `struct` is used to store chunks of data from a file.
-/// It is used to store the data that is being sent or received for
-/// Windowsize option.
+/// Window `struct` is used to store chunks of data from a file. It is
+/// used to help store the data that is being sent or received for the
+/// [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize option.
 ///
 /// # Example
 /// ```rust
@@ -206,8 +206,10 @@ mod tests {
             .unwrap()
     }
 
+    #[allow(unused_must_use)]
     fn clean(file_name: &str) {
         let file_name = DIR_NAME.to_string() + "/" + file_name;
         fs::remove_file(file_name).unwrap();
+        fs::remove_dir(DIR_NAME);
     }
 }

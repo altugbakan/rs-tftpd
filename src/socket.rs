@@ -12,9 +12,8 @@ use crate::Packet;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Socket `trait` is used for easy message transmission of common TFTP
-/// message types. This `trait` is implemented for [`UdpSocket`] and used
-/// for abstraction of single socket communication.
+/// Socket `trait` is used to allow building custom sockets to be used for
+/// TFTP communication.
 pub trait Socket: Send + Sync + 'static {
     /// Sends a [`Packet`] to the socket's connected remote [`Socket`].
     fn send(&self, packet: &Packet) -> Result<(), Box<dyn Error>>;
@@ -162,6 +161,36 @@ impl ServerSocket {
     /// Returns a [`Sender`] for sending [`Packet`]s to the remote [`Socket`].
     pub fn sender(&self) -> Sender<Packet> {
         self.sender.lock().unwrap().clone()
+    }
+}
+
+impl<T: Socket + ?Sized> Socket for Box<T> {
+    fn send(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+        (**self).send(packet)
+    }
+
+    fn send_to(&self, packet: &Packet, to: &SocketAddr) -> Result<(), Box<dyn Error>> {
+        (**self).send_to(packet, to)
+    }
+
+    fn recv(&self, buf: &mut [u8]) -> Result<Packet, Box<dyn Error>> {
+        (**self).recv(buf)
+    }
+
+    fn recv_from(&self, buf: &mut [u8]) -> Result<(Packet, SocketAddr), Box<dyn Error>> {
+        (**self).recv_from(buf)
+    }
+
+    fn remote_addr(&self) -> Result<SocketAddr, Box<dyn Error>> {
+        (**self).remote_addr()
+    }
+
+    fn set_read_timeout(&mut self, dur: Duration) -> Result<(), Box<dyn Error>> {
+        (**self).set_read_timeout(dur)
+    }
+
+    fn set_write_timeout(&mut self, dur: Duration) -> Result<(), Box<dyn Error>> {
+        (**self).set_write_timeout(dur)
     }
 }
 

@@ -121,49 +121,36 @@ impl Server {
             ErrorCode::FileExists => {
                 let worker_options =
                     parse_options(options, RequestType::Read(file_path.metadata()?.len()))?;
+                let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
-                    let mut socket = create_single_socket(&self.socket, to)?;
-                    socket.set_read_timeout(worker_options.timeout)?;
-                    socket.set_write_timeout(worker_options.timeout)?;
-
-                    self.clients.insert(*to, socket.sender());
+                    let single_socket = create_single_socket(&self.socket, to)?;
+                    self.clients.insert(*to, single_socket.sender());
                     self.largest_block_size =
                         max(self.largest_block_size, worker_options.block_size);
-                    accept_request(
-                        &socket,
-                        options,
-                        RequestType::Read(file_path.metadata()?.len()),
-                    )?;
 
-                    let worker = Worker::new(
-                        socket,
-                        file_path.clone(),
-                        worker_options.block_size,
-                        worker_options.timeout,
-                        worker_options.window_size,
-                    );
-                    worker.send()
+                    socket = Box::new(single_socket);
                 } else {
-                    let socket = create_multi_socket(&self.socket.local_addr()?, to)?;
-                    socket.set_read_timeout(Some(worker_options.timeout))?;
-                    socket.set_write_timeout(Some(worker_options.timeout))?;
-
-                    accept_request(
-                        &socket,
-                        options,
-                        RequestType::Read(file_path.metadata()?.len()),
-                    )?;
-
-                    let worker = Worker::new(
-                        socket,
-                        file_path.clone(),
-                        worker_options.block_size,
-                        worker_options.timeout,
-                        worker_options.window_size,
-                    );
-                    worker.send()
+                    socket = Box::new(create_multi_socket(&self.socket.local_addr()?, to)?);
                 }
+
+                socket.set_read_timeout(worker_options.timeout)?;
+                socket.set_write_timeout(worker_options.timeout)?;
+
+                accept_request(
+                    &socket,
+                    options,
+                    RequestType::Read(file_path.metadata()?.len()),
+                )?;
+
+                let worker = Worker::new(
+                    socket,
+                    file_path.clone(),
+                    worker_options.block_size,
+                    worker_options.timeout,
+                    worker_options.window_size,
+                );
+                worker.send()
             }
             _ => Err("Unexpected error code when checking file".into()),
         }
@@ -191,41 +178,32 @@ impl Server {
             ),
             ErrorCode::FileNotFound => {
                 let worker_options = parse_options(options, RequestType::Write)?;
+                let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
-                    let mut socket = create_single_socket(&self.socket, to)?;
-                    socket.set_read_timeout(worker_options.timeout)?;
-                    socket.set_write_timeout(worker_options.timeout)?;
-
-                    self.clients.insert(*to, socket.sender());
+                    let single_socket = create_single_socket(&self.socket, to)?;
+                    self.clients.insert(*to, single_socket.sender());
                     self.largest_block_size =
                         max(self.largest_block_size, worker_options.block_size);
-                    accept_request(&socket, options, RequestType::Write)?;
 
-                    let worker = Worker::new(
-                        socket,
-                        file_path.clone(),
-                        worker_options.block_size,
-                        worker_options.timeout,
-                        worker_options.window_size,
-                    );
-                    worker.receive()
+                    socket = Box::new(single_socket);
                 } else {
-                    let socket = create_multi_socket(&self.socket.local_addr()?, to)?;
-                    socket.set_read_timeout(Some(worker_options.timeout))?;
-                    socket.set_write_timeout(Some(worker_options.timeout))?;
-
-                    accept_request(&socket, options, RequestType::Write)?;
-
-                    let worker = Worker::new(
-                        socket,
-                        file_path.clone(),
-                        worker_options.block_size,
-                        worker_options.timeout,
-                        worker_options.window_size,
-                    );
-                    worker.receive()
+                    socket = Box::new(create_multi_socket(&self.socket.local_addr()?, to)?);
                 }
+
+                socket.set_read_timeout(worker_options.timeout)?;
+                socket.set_write_timeout(worker_options.timeout)?;
+
+                accept_request(&socket, options, RequestType::Write)?;
+
+                let worker = Worker::new(
+                    socket,
+                    file_path.clone(),
+                    worker_options.block_size,
+                    worker_options.timeout,
+                    worker_options.window_size,
+                );
+                worker.receive()
             }
             _ => Err("Unexpected error code when checking file".into()),
         }
