@@ -26,10 +26,10 @@ cargo install tftpd
 tftpd --help
 ```
 
-To run the server on the IP address `0.0.0.0`, port `1234` in the `/home/user/tftp` directory:
+To run the server on the IP address `0.0.0.0`, read-only, on port `1234` in the `/home/user/tftp` directory:
 
 ```bash
-tftpd -i 0.0.0.0 -p 1234 -d "/home/user/tftp"
+tftpd -i 0.0.0.0 -p 1234 -d "/home/user/tftp" --read-only
 ```
 
 ## License
