@@ -31,6 +31,7 @@ pub struct Server {
     socket: UdpSocket,
     directory: PathBuf,
     single_port: bool,
+    read_only: bool,
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
 }
@@ -44,6 +45,7 @@ impl Server {
             socket,
             directory: config.directory.clone(),
             single_port: config.single_port,
+            read_only: config.read_only,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
         };
@@ -77,6 +79,22 @@ impl Server {
                         mut options,
                         ..
                     } => {
+                        if self.read_only {
+                            if Socket::send_to(
+                                &self.socket,
+                                &Packet::Error {
+                                    code: ErrorCode::AccessViolation,
+                                    msg: "server is read-only".to_string(),
+                                },
+                                &from,
+                            )
+                            .is_err()
+                            {
+                                eprintln!("Could not send error packet");
+                            };
+                            eprintln!("Received invalid request");
+                            continue;
+                        }
                         println!("Receiving {filename} from {from}");
                         if let Err(err) = self.handle_wrq(filename.clone(), &mut options, &from) {
                             eprintln!("Error while receiving file: {err}")

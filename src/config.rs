@@ -27,6 +27,8 @@ pub struct Config {
     pub directory: PathBuf,
     /// Use a single port for both sending and receiving. (default: false)
     pub single_port: bool,
+    /// Refuse all write requests, making the server read-only. (default: false)
+    pub read_only: bool,
 }
 
 impl Config {
@@ -38,6 +40,7 @@ impl Config {
             port: 69,
             directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
             single_port: false,
+            read_only: false,
         };
 
         args.next();
@@ -71,6 +74,9 @@ impl Config {
                 "-s" | "--single-port" => {
                     config.single_port = true;
                 }
+                "-r" | "--read-only" => {
+                    config.read_only = true;
+                }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
@@ -81,6 +87,7 @@ impl Config {
                     );
                     println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
                     println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
+                    println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -101,7 +108,7 @@ mod tests {
     #[test]
     fn parses_full_config() {
         let config = Config::new(
-            vec!["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s"]
+            vec!["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s", "-r"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -111,6 +118,7 @@ mod tests {
         assert_eq!(config.port, 1234);
         assert_eq!(config.directory, PathBuf::from_str("/").unwrap());
         assert!(config.single_port);
+        assert!(config.read_only);
     }
 
     #[test]
