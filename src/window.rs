@@ -191,7 +191,8 @@ mod tests {
     fn initialize(file_name: &str) -> File {
         let file_name = DIR_NAME.to_string() + "/" + file_name;
         if !Path::new(DIR_NAME).is_dir() {
-            fs::create_dir(DIR_NAME).unwrap();
+            if fs::create_dir(DIR_NAME).is_err() {
+            }
         }
 
         if File::open(&file_name).is_ok() {
