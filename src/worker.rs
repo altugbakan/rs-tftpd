@@ -32,6 +32,7 @@ const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
 ///     512,
 ///     Duration::from_secs(1),
 ///     1,
+///     1,
 /// );
 ///
 /// worker.send().unwrap();
@@ -42,6 +43,7 @@ pub struct Worker<T: Socket + ?Sized> {
     blk_size: usize,
     timeout: Duration,
     windowsize: u16,
+    duplicate_packets: u8,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -52,6 +54,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         blk_size: usize,
         timeout: Duration,
         windowsize: u16,
+        duplicate_packets: u8,
     ) -> Worker<T> {
         Worker {
             socket,
@@ -59,6 +62,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             blk_size,
             timeout,
             windowsize,
+            duplicate_packets,
         }
     }
 
@@ -136,7 +140,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             let mut time = Instant::now() - (self.timeout + TIMEOUT_BUFFER);
             loop {
                 if time.elapsed() >= self.timeout {
-                    send_window(&self.socket, &window, block_number)?;
+                    self.send_window(&window, block_number)?;
                     time = Instant::now();
                 }
 
@@ -214,7 +218,8 @@ impl<T: Socket + ?Sized> Worker<T> {
             }
 
             window.empty()?;
-            self.socket.send(&Packet::Ack(block_number))?;
+            self.send_packet(&Packet::Ack(block_number))?;
+
             if size < self.blk_size {
                 break;
             };
@@ -222,20 +227,24 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         Ok(())
     }
-}
 
-fn send_window<T: Socket>(
-    socket: &T,
-    window: &Window,
-    mut block_num: u16,
-) -> Result<(), Box<dyn Error>> {
-    for frame in window.get_elements() {
-        socket.send(&Packet::Data {
-            block_num,
-            data: frame.to_vec(),
-        })?;
-        block_num = block_num.wrapping_add(1);
+    fn send_window(&self, window: &Window, mut block_num: u16) -> Result<(), Box<dyn Error>> {
+        for frame in window.get_elements() {
+            self.send_packet(&Packet::Data {
+                block_num,
+                data: frame.to_vec(),
+            })?;
+            block_num = block_num.wrapping_add(1);
+        }
+
+        Ok(())
     }
 
-    Ok(())
+    fn send_packet(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+        for _ in 0..self.duplicate_packets {
+            self.socket.send(packet)?;
+        }
+
+        Ok(())
+    }
 }

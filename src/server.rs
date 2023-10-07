@@ -32,6 +32,7 @@ pub struct Server {
     directory: PathBuf,
     single_port: bool,
     read_only: bool,
+    duplicate_packets: u8,
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
 }
@@ -46,6 +47,7 @@ impl Server {
             directory: config.directory.clone(),
             single_port: config.single_port,
             read_only: config.read_only,
+            duplicate_packets: config.duplicate_packets,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
         };
@@ -177,6 +179,7 @@ impl Server {
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
+                    self.duplicate_packets,
                 );
                 worker.send()
             }
@@ -234,6 +237,7 @@ impl Server {
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
+                    self.duplicate_packets,
                 );
                 worker.receive()
             }

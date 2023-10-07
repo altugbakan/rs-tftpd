@@ -119,10 +119,10 @@ mod tests {
     use super::*;
     use std::{
         fs::{self, OpenOptions},
-        io::{Seek, Write},
+        io::Write,
     };
 
-    const DIR_NAME: &str = "tmp";
+    const DIR_NAME: &str = "target/test";
 
     #[test]
     fn fills_and_removes_from_window() {
@@ -131,7 +131,9 @@ mod tests {
         let mut file = initialize(FILE_NAME);
         file.write_all(b"Hello, world!").unwrap();
         file.flush().unwrap();
-        file.rewind().unwrap();
+        drop(file);
+
+        file = open(FILE_NAME);
 
         let mut window = Window::new(2, 5, file);
         window.fill().unwrap();
@@ -201,6 +203,17 @@ mod tests {
             .append(true)
             .create(true)
             .open(&file_name)
+            .unwrap()
+    }
+
+    fn open(file_name: &str) -> File {
+        let file_name = DIR_NAME.to_string() + "/" + file_name;
+
+        OpenOptions::new()
+            .read(true)
+            .append(true)
+            .create(true)
+            .open(file_name)
             .unwrap()
     }
 

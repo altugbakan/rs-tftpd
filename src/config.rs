@@ -29,6 +29,8 @@ pub struct Config {
     pub single_port: bool,
     /// Refuse all write requests, making the server read-only. (default: false)
     pub read_only: bool,
+    /// Duplicate all packets sent from the server. (default: 1)
+    pub duplicate_packets: u8,
 }
 
 impl Config {
@@ -41,6 +43,7 @@ impl Config {
             directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
             single_port: false,
             read_only: false,
+            duplicate_packets: 1,
         };
 
         args.next();
@@ -88,9 +91,22 @@ impl Config {
                     println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
                     println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
+                    println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 1)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
+                "--duplicate-packets" => {
+                    if let Some(duplicate_packets_str) = args.next() {
+                        let duplicate_packets = duplicate_packets_str.parse::<u8>()?;
+                        if duplicate_packets < 1 {
+                            return Err("Duplicate packets must be greater than 0".into());
+                        }
+                        config.duplicate_packets = duplicate_packets;
+                    } else {
+                        return Err("Missing duplicate packets after flag".into());
+                    }
+                }
+
                 invalid => return Err(format!("Invalid flag: {invalid}").into()),
             }
         }
@@ -154,6 +170,23 @@ mod tests {
     fn returns_error_on_invalid_directory() {
         assert!(Config::new(
             ["/", "-d", "/this/does/not/exist"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn returns_error_on_invalid_duplicate_packets() {
+        assert!(Config::new(
+            ["/", "--duplicate-packets", "0"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .is_err());
+
+        assert!(Config::new(
+            ["/", "--duplicate-packets", "-1"]
                 .iter()
                 .map(|s| s.to_string()),
         )
