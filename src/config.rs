@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn parses_full_config() {
         let config = Config::new(
-            vec!["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s", "-r"]
+            ["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s", "-r"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn parses_some_config() {
         let config = Config::new(
-            vec!["/", "-i", "0.0.0.0", "-d", "/"]
+            ["/", "-i", "0.0.0.0", "-d", "/"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn returns_error_on_invalid_ip() {
         assert!(Config::new(
-            vec!["/", "-i", "1234.5678.9012.3456"]
+            ["/", "-i", "1234.5678.9012.3456"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -147,13 +147,13 @@ mod tests {
 
     #[test]
     fn returns_error_on_invalid_port() {
-        assert!(Config::new(vec!["/", "-p", "1234567"].iter().map(|s| s.to_string()),).is_err());
+        assert!(Config::new(["/", "-p", "1234567"].iter().map(|s| s.to_string()),).is_err());
     }
 
     #[test]
     fn returns_error_on_invalid_directory() {
         assert!(Config::new(
-            vec!["/", "-d", "/this/does/not/exist"]
+            ["/", "-d", "/this/does/not/exist"]
                 .iter()
                 .map(|s| s.to_string()),
         )

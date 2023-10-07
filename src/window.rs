@@ -120,7 +120,6 @@ mod tests {
     use std::{
         fs::{self, OpenOptions},
         io::{Seek, Write},
-        path::Path,
     };
 
     const DIR_NAME: &str = "tmp";
@@ -190,10 +189,8 @@ mod tests {
 
     fn initialize(file_name: &str) -> File {
         let file_name = DIR_NAME.to_string() + "/" + file_name;
-        if !Path::new(DIR_NAME).is_dir() {
-            if fs::create_dir(DIR_NAME).is_err() {
-            }
-        }
+
+        let _ = fs::create_dir_all(DIR_NAME);
 
         if File::open(&file_name).is_ok() {
             fs::remove_file(&file_name).unwrap();
