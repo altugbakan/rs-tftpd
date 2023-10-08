@@ -91,15 +91,20 @@ impl Config {
                     println!("  -d, --directory <DIRECTORY>\tSet the serving directory (default: Current Working Directory)");
                     println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
-                    println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 1)");
+                    println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 0)");
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
                 "--duplicate-packets" => {
                     if let Some(duplicate_packets_str) = args.next() {
                         let duplicate_packets = duplicate_packets_str.parse::<u8>()?;
-                        if duplicate_packets < 1 {
-                            return Err("Duplicate packets must be greater than 0".into());
+
+                        if duplicate_packets == u8::MAX {
+                            return Err(format!(
+                                "Duplicate packets should be less than {}",
+                                u8::MAX
+                            )
+                            .into());
                         }
                         config.duplicate_packets = duplicate_packets;
                     } else {
@@ -179,14 +184,17 @@ mod tests {
     #[test]
     fn returns_error_on_invalid_duplicate_packets() {
         assert!(Config::new(
-            ["/", "--duplicate-packets", "0"]
+            ["/", "--duplicate-packets", "-1"]
                 .iter()
                 .map(|s| s.to_string()),
         )
         .is_err());
+    }
 
+    #[test]
+    fn returns_error_on_max_duplicate_packets() {
         assert!(Config::new(
-            ["/", "--duplicate-packets", "-1"]
+            ["/", "--duplicate-packets", format!("{}", u8::MAX).as_str()]
                 .iter()
                 .map(|s| s.to_string()),
         )

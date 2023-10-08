@@ -179,7 +179,7 @@ impl Server {
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
-                    self.duplicate_packets,
+                    self.duplicate_packets + 1,
                 );
                 worker.send()
             }
