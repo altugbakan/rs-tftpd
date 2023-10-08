@@ -88,7 +88,7 @@ impl Config {
                     println!(
                         "  -p, --port <PORT>\t\tSet the listening port of the server (default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the listening port of the server (default: Current Working Directory)");
+                    println!("  -d, --directory <DIRECTORY>\tSet the serving directory (default: Current Working Directory)");
                     println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 1)");
