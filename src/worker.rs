@@ -9,7 +9,6 @@ use std::{
 
 const MAX_RETRIES: u32 = 6;
 const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
-const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
 /// Worker `struct` is used for multithreaded file sending and receiving.
 /// It creates a new socket using the Server's IP and a random port
@@ -44,7 +43,7 @@ pub struct Worker<T: Socket + ?Sized> {
     blk_size: usize,
     timeout: Duration,
     windowsize: u16,
-    duplicate_packets: u8,
+    repeat_amount: u8,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -55,7 +54,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         blk_size: usize,
         timeout: Duration,
         windowsize: u16,
-        duplicate_packets: u8,
+        repeat_amount: u8,
     ) -> Worker<T> {
         Worker {
             socket,
@@ -63,7 +62,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             blk_size,
             timeout,
             windowsize,
-            duplicate_packets,
+            repeat_amount,
         }
     }
 
@@ -242,10 +241,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn send_packet(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
-        for i in 0..self.duplicate_packets {
-            if i > 0 {
-                std::thread::sleep(DEFAULT_DUPLICATE_DELAY);
-            }
+        for _ in 0..self.repeat_amount {
             self.socket.send(packet)?;
         }
 

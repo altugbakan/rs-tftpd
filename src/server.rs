@@ -32,6 +32,7 @@ pub struct Server {
     directory: PathBuf,
     single_port: bool,
     read_only: bool,
+    overwrite: bool,
     duplicate_packets: u8,
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
@@ -47,6 +48,7 @@ impl Server {
             directory: config.directory.clone(),
             single_port: config.single_port,
             read_only: config.read_only,
+            overwrite: config.overwrite,
             duplicate_packets: config.duplicate_packets,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
@@ -94,7 +96,7 @@ impl Server {
                             {
                                 eprintln!("Could not send error packet");
                             };
-                            eprintln!("Received invalid request");
+                            eprintln!("Received write request while in read-only mode");
                             continue;
                         }
                         println!("Receiving {filename} from {from}");
@@ -179,7 +181,7 @@ impl Server {
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
-                    self.duplicate_packets,
+                    self.duplicate_packets + 1,
                 );
                 worker.send()
             }
@@ -194,15 +196,51 @@ impl Server {
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
         let file_path = &self.directory.join(file_name);
+        let initialize_write = &mut || -> Result<(), Box<dyn Error>> {
+            let worker_options = parse_options(options, RequestType::Write)?;
+            let mut socket: Box<dyn Socket>;
+
+            if self.single_port {
+                let single_socket = create_single_socket(&self.socket, to)?;
+                self.clients.insert(*to, single_socket.sender());
+                self.largest_block_size = max(self.largest_block_size, worker_options.block_size);
+
+                socket = Box::new(single_socket);
+            } else {
+                socket = Box::new(create_multi_socket(&self.socket.local_addr()?, to)?);
+            }
+
+            socket.set_read_timeout(worker_options.timeout)?;
+            socket.set_write_timeout(worker_options.timeout)?;
+
+            accept_request(&socket, options, RequestType::Write)?;
+
+            let worker = Worker::new(
+                socket,
+                file_path.clone(),
+                worker_options.block_size,
+                worker_options.timeout,
+                worker_options.window_size,
+                self.duplicate_packets,
+            );
+            worker.receive()
+        };
+
         match check_file_exists(file_path, &self.directory) {
-            ErrorCode::FileExists => Socket::send_to(
-                &self.socket,
-                &Packet::Error {
-                    code: ErrorCode::FileExists,
-                    msg: "requested file already exists".to_string(),
-                },
-                to,
-            ),
+            ErrorCode::FileExists => {
+                if self.overwrite {
+                    initialize_write()
+                } else {
+                    Socket::send_to(
+                        &self.socket,
+                        &Packet::Error {
+                            code: ErrorCode::FileExists,
+                            msg: "requested file already exists".to_string(),
+                        },
+                        to,
+                    )
+                }
+            }
             ErrorCode::AccessViolation => Socket::send_to(
                 &self.socket,
                 &Packet::Error {
@@ -211,36 +249,7 @@ impl Server {
                 },
                 to,
             ),
-            ErrorCode::FileNotFound => {
-                let worker_options = parse_options(options, RequestType::Write)?;
-                let mut socket: Box<dyn Socket>;
-
-                if self.single_port {
-                    let single_socket = create_single_socket(&self.socket, to)?;
-                    self.clients.insert(*to, single_socket.sender());
-                    self.largest_block_size =
-                        max(self.largest_block_size, worker_options.block_size);
-
-                    socket = Box::new(single_socket);
-                } else {
-                    socket = Box::new(create_multi_socket(&self.socket.local_addr()?, to)?);
-                }
-
-                socket.set_read_timeout(worker_options.timeout)?;
-                socket.set_write_timeout(worker_options.timeout)?;
-
-                accept_request(&socket, options, RequestType::Write)?;
-
-                let worker = Worker::new(
-                    socket,
-                    file_path.clone(),
-                    worker_options.block_size,
-                    worker_options.timeout,
-                    worker_options.window_size,
-                    self.duplicate_packets,
-                );
-                worker.receive()
-            }
+            ErrorCode::FileNotFound => initialize_write(),
             _ => Err("Unexpected error code when checking file".into()),
         }
     }
