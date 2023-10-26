@@ -45,7 +45,7 @@ impl Config {
             directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
             single_port: false,
             read_only: false,
-            duplicate_packets: 1,
+            duplicate_packets: 0,
             overwrite: false,
         };
 
