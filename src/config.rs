@@ -207,4 +207,11 @@ mod tests {
         )
         .is_err());
     }
+
+    #[test]
+    fn initializes_duplicate_packets_as_zero() {
+        let config = Config::new(["/"].iter().map(|s| s.to_string())).unwrap();
+
+        assert_eq!(config.duplicate_packets, 0);
+    }
 }
