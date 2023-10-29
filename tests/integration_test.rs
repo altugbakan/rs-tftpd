@@ -37,13 +37,12 @@ impl Drop for CommandRunner {
 #[test]
 fn test_send() {
     let file_name = "send";
+    let port = "6969";
     initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6969", "-d", SERVER_DIR]);
-    let mut client = CommandRunner::new(
-        "time",
-        &["atftp", "-g", "-r", file_name, "127.0.0.1", "6969"],
-    );
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
+    let mut client =
+        CommandRunner::new("time", &["atftp", "-g", "-r", file_name, "127.0.0.1", port]);
 
     let status = client.wait();
     assert!(status.success());
@@ -52,18 +51,21 @@ fn test_send() {
 #[test]
 fn test_receive() {
     let file_name = "receive";
+    let port = "6970";
     initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6970", "-d", SERVER_DIR]);
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
     let mut client = CommandRunner::new(
         "time",
         &[
             "atftp",
             "-p",
+            "-r",
+            file_name,
             "-l",
             format!("{CLIENT_DIR}/{file_name}").as_str(),
             "127.0.0.1",
-            "6970",
+            port,
         ],
     );
 
