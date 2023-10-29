@@ -1,23 +1,19 @@
 #![cfg(feature = "integration")]
 
+use std::fs::create_dir_all;
 use std::process::{Child, Command, ExitStatus};
 
 const SERVER_DIR: &str = "target/integration/server";
 const CLIENT_DIR: &str = "target/integration/client";
-const FILE_PREFIX: &str = "10M_FILE";
 
 struct CommandRunner {
     process: Child,
 }
 
 impl CommandRunner {
-    fn new(program: &str, args: &[&str], current_dir: &str) -> Self {
-        let mut dir = std::env::current_dir().expect("error getting current directory");
-        dir.push(current_dir);
-
+    fn new(program: &str, args: &[&str]) -> Self {
         let command = Command::new(program)
             .args(args)
-            .current_dir(dir)
             .spawn()
             .expect("error starting process");
         Self { process: command }
@@ -40,14 +36,13 @@ impl Drop for CommandRunner {
 
 #[test]
 fn test_send() {
-    let file_name = format!("{SERVER_DIR}/{FILE_PREFIX}_send");
-    initialize(file_name.as_str());
+    let file_name = "send";
+    initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6969"], SERVER_DIR);
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6969", "-d", SERVER_DIR]);
     let mut client = CommandRunner::new(
         "time",
-        &["atftp", "-g", "-r", file_name.as_str(), "127.0.0.1", "6969"],
-        CLIENT_DIR,
+        &["atftp", "-g", "-r", file_name, "127.0.0.1", "6969"],
     );
 
     let status = client.wait();
@@ -56,14 +51,20 @@ fn test_send() {
 
 #[test]
 fn test_receive() {
-    let file_name = format!("{CLIENT_DIR}/{FILE_PREFIX}_receive");
-    initialize(file_name.as_str());
+    let file_name = "receive";
+    initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6970"], SERVER_DIR);
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", "6970", "-d", SERVER_DIR]);
     let mut client = CommandRunner::new(
         "time",
-        &["atftp", "-p", "-l", file_name.as_str(), "127.0.0.1", "6969"],
-        CLIENT_DIR,
+        &[
+            "atftp",
+            "-p",
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "127.0.0.1",
+            "6969",
+        ],
     );
 
     let status = client.wait();
@@ -76,14 +77,8 @@ fn initialize(file_name: &str) {
 }
 
 fn create_folders() {
-    Command::new("mkdir")
-        .args(["-p", SERVER_DIR])
-        .spawn()
-        .expect("error creating source directory");
-    Command::new("mkdir")
-        .args(["-p", CLIENT_DIR])
-        .spawn()
-        .expect("error creating destionation directory");
+    create_dir_all(SERVER_DIR).expect("error creating server directory");
+    create_dir_all(CLIENT_DIR).expect("error creating client directory");
 }
 
 fn create_file(file_name: &str) {
