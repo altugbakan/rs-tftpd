@@ -1,4 +1,4 @@
-// #![cfg(feature = "integration")]
+#![cfg(feature = "integration")]
 
 use std::fs::create_dir_all;
 use std::process::{Child, Command, ExitStatus};
@@ -63,7 +63,7 @@ fn test_receive() {
             "-l",
             format!("{CLIENT_DIR}/{file_name}").as_str(),
             "127.0.0.1",
-            "6969",
+            "6970",
         ],
     );
 
