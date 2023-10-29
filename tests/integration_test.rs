@@ -1,4 +1,4 @@
-#![cfg(feature = "integration")]
+// #![cfg(feature = "integration")]
 
 use std::fs::create_dir_all;
 use std::process::{Child, Command, ExitStatus};
@@ -90,5 +90,7 @@ fn create_file(file_name: &str) {
             "count=10",
         ])
         .spawn()
-        .expect("error creating test file");
+        .expect("error creating test file")
+        .wait()
+        .expect("error waiting for test file creation");
 }
