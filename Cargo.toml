@@ -8,3 +8,6 @@ repository = "https://github.com/altugbakan/rs-tftpd"
 license = "MIT"
 keywords = ["tftp", "server"]
 categories = ["command-line-utilities"]
+
+[features]
+integration = []
