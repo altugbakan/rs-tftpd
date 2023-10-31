@@ -7,6 +7,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use std::env;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_BLOCK_SIZE: usize = 512;
@@ -29,7 +30,8 @@ const DEFAULT_WINDOW_SIZE: u16 = 1;
 /// ```
 pub struct Server {
     socket: UdpSocket,
-    directory: PathBuf,
+    up_directory: PathBuf,
+    down_directory: PathBuf,
     single_port: bool,
     read_only: bool,
     overwrite: bool,
@@ -43,9 +45,12 @@ impl Server {
     pub fn new(config: &Config) -> Result<Server, Box<dyn Error>> {
         let socket = UdpSocket::bind(SocketAddr::from((config.ip_address, config.port)))?;
 
+        let directory = if config.directory != "" {PathBuf::from(config.directory.clone())} else {env::current_dir().unwrap_or_else(|_| env::temp_dir())};
+
         let server = Server {
             socket,
-            directory: config.directory.clone(),
+            up_directory: if config.up_directory != "" {PathBuf::from(config.up_directory.clone())} else {directory.clone()},
+            down_directory: if config.down_directory != "" {PathBuf::from(config.down_directory.clone())} else {directory.clone()},
             single_port: config.single_port,
             read_only: config.read_only,
             overwrite: config.overwrite,
@@ -55,6 +60,16 @@ impl Server {
         };
 
         Ok(server)
+    }
+
+    /// display upload directory
+    pub fn display_updir(&self) -> std::path::Display<'_> {
+        self.up_directory.display()
+    }
+
+    /// display download directory
+    pub fn display_downdir(&self) -> std::path::Display<'_> {
+        self.down_directory.display()
     }
 
     /// Starts listening for connections. Note that this function does not finish running until termination.
@@ -132,8 +147,8 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(filename);
-        match check_file_exists(file_path, &self.directory) {
+        let file_path = &self.down_directory.join(filename);
+        match check_file_exists(file_path, &self.down_directory) {
             ErrorCode::FileNotFound => Socket::send_to(
                 &self.socket,
                 &Packet::Error {
@@ -195,7 +210,7 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(file_name);
+        let file_path = &self.up_directory.join(file_name);
         let initialize_write = &mut || -> Result<(), Box<dyn Error>> {
             let worker_options = parse_options(options, RequestType::Write)?;
             let mut socket: Box<dyn Socket>;
@@ -226,7 +241,7 @@ impl Server {
             worker.receive()
         };
 
-        match check_file_exists(file_path, &self.directory) {
+        match check_file_exists(file_path, &self.up_directory) {
             ErrorCode::FileExists => {
                 if self.overwrite {
                     initialize_write()

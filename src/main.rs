@@ -16,10 +16,11 @@ fn main() {
     });
 
     println!(
-        "Running TFTP Server on {}:{} in {}",
+        "Running TFTP Server on {}:{} in upload dir {}, download dir {}",
         config.ip_address,
         config.port,
-        config.directory.display()
+        server.display_updir(),
+        server.display_downdir()
     );
 
     server.listen();

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::net::Ipv4Addr;
-use std::path::{Path, PathBuf};
-use std::{env, process};
+use std::path::Path;
+use std::process;
 
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
@@ -24,7 +24,11 @@ pub struct Config {
     /// Local Port number of the TFTP Server. (default: 69)
     pub port: u16,
     /// Default directory of the TFTP Server. (default: current working directory)
-    pub directory: PathBuf,
+    pub directory: String,
+    /// Upload directory of the TFTP Server, if not set, default directory is used.
+    pub up_directory: String,
+    /// Download directory of the TFTP Server, if not set, default directory is used.
+    pub down_directory: String,
     /// Use a single port for both sending and receiving. (default: false)
     pub single_port: bool,
     /// Refuse all write requests, making the server read-only. (default: false)
@@ -42,7 +46,9 @@ impl Config {
         let mut config = Config {
             ip_address: Ipv4Addr::new(127, 0, 0, 1),
             port: 69,
-            directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
+            directory: "".to_string(),
+            up_directory: "".to_string(),
+            down_directory: "".to_string(),
             single_port: false,
             read_only: false,
             duplicate_packets: 0,
@@ -72,9 +78,29 @@ impl Config {
                         if !Path::new(&dir_str).exists() {
                             return Err(format!("{dir_str} does not exist").into());
                         }
-                        config.directory = PathBuf::from(dir_str);
+                        config.directory = dir_str;
                     } else {
                         return Err("Missing directory after flag".into());
+                    }
+                }
+                "--updir" => {
+                    if let Some(dir_str) = args.next() {
+                        if !Path::new(&dir_str).exists() {
+                            return Err(format!("{dir_str} does not exist").into());
+                        }
+                        config.up_directory = dir_str;
+                    } else {
+                        return Err("Missing upload directory after flag".into());
+                    }
+                }
+                "--downdir" => {
+                    if let Some(dir_str) = args.next() {
+                        if !Path::new(&dir_str).exists() {
+                            return Err(format!("{dir_str} does not exist").into());
+                        }
+                        config.down_directory = dir_str;
+                    } else {
+                        return Err("Missing download directory after flag".into());
                     }
                 }
                 "-s" | "--single-port" => {
@@ -129,14 +155,12 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     #[test]
     fn parses_full_config() {
         let config = Config::new(
-            ["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-s", "-r"]
+            ["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "--updir", "/", "--downdir", "/","-s", "-r"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -144,7 +168,9 @@ mod tests {
 
         assert_eq!(config.ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 1234);
-        assert_eq!(config.directory, PathBuf::from_str("/").unwrap());
+        assert_eq!(config.directory, "/");
+        assert_eq!(config.up_directory, "/");
+        assert_eq!(config.down_directory, "/");
         assert!(config.single_port);
         assert!(config.read_only);
     }
@@ -160,7 +186,7 @@ mod tests {
 
         assert_eq!(config.ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 69);
-        assert_eq!(config.directory, PathBuf::from_str("/").unwrap());
+        assert_eq!(config.directory, "/");
     }
 
     #[test]
@@ -182,6 +208,26 @@ mod tests {
     fn returns_error_on_invalid_directory() {
         assert!(Config::new(
             ["/", "-d", "/this/does/not/exist"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn returns_error_on_invalid_up_directory() {
+        assert!(Config::new(
+            ["/", "--updir", "/this/does/not/exist"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn returns_error_on_invalid_down_directory() {
+        assert!(Config::new(
+            ["/", "--downdir", "/this/does/not/exist"]
                 .iter()
                 .map(|s| s.to_string()),
         )
