@@ -15,13 +15,22 @@ fn main() {
         process::exit(1)
     });
 
-    println!(
-        "Running TFTP Server on {}:{} in upload dir {}, download dir {}",
-        config.ip_address,
-        config.port,
-        server.display_updir(),
-        server.display_downdir()
-    );
+    if config.receive_directory == config.send_directory {
+        println!(
+            "Running TFTP Server on {}:{} in {}",
+            config.ip_address,
+            config.port,
+            config.directory.display()
+        );
+    } else {
+        println!(
+            "Running TFTP Server on {}:{}. Sending from {}, receiving to {}",
+            config.ip_address,
+            config.port,
+            config.send_directory.display(),
+            config.receive_directory.display(),
+        );
+    }
 
     server.listen();
 }

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::net::Ipv4Addr;
-use std::path::Path;
-use std::process;
+use std::path::{Path, PathBuf};
+use std::{env, process};
 
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
@@ -24,11 +24,11 @@ pub struct Config {
     /// Local Port number of the TFTP Server. (default: 69)
     pub port: u16,
     /// Default directory of the TFTP Server. (default: current working directory)
-    pub directory: String,
-    /// Upload directory of the TFTP Server, if not set, default directory is used.
-    pub up_directory: String,
-    /// Download directory of the TFTP Server, if not set, default directory is used.
-    pub down_directory: String,
+    pub directory: PathBuf,
+    /// Upload directory of the TFTP Server. (default: directory)
+    pub receive_directory: PathBuf,
+    /// Download directory of the TFTP Server. (default: directory)
+    pub send_directory: PathBuf,
     /// Use a single port for both sending and receiving. (default: false)
     pub single_port: bool,
     /// Refuse all write requests, making the server read-only. (default: false)
@@ -46,9 +46,9 @@ impl Config {
         let mut config = Config {
             ip_address: Ipv4Addr::new(127, 0, 0, 1),
             port: 69,
-            directory: "".to_string(),
-            up_directory: "".to_string(),
-            down_directory: "".to_string(),
+            directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
+            receive_directory: PathBuf::new(),
+            send_directory: PathBuf::new(),
             single_port: false,
             read_only: false,
             duplicate_packets: 0,
@@ -78,29 +78,29 @@ impl Config {
                         if !Path::new(&dir_str).exists() {
                             return Err(format!("{dir_str} does not exist").into());
                         }
-                        config.directory = dir_str;
+                        config.directory = dir_str.into();
                     } else {
                         return Err("Missing directory after flag".into());
                     }
                 }
-                "--updir" => {
+                "-rd" | "--receive-directory" => {
                     if let Some(dir_str) = args.next() {
                         if !Path::new(&dir_str).exists() {
                             return Err(format!("{dir_str} does not exist").into());
                         }
-                        config.up_directory = dir_str;
+                        config.receive_directory = dir_str.into();
                     } else {
-                        return Err("Missing upload directory after flag".into());
+                        return Err("Missing receive directory after flag".into());
                     }
                 }
-                "--downdir" => {
+                "-sd" | "--send-directory" => {
                     if let Some(dir_str) = args.next() {
                         if !Path::new(&dir_str).exists() {
                             return Err(format!("{dir_str} does not exist").into());
                         }
-                        config.down_directory = dir_str;
+                        config.send_directory = dir_str.into();
                     } else {
-                        return Err("Missing download directory after flag".into());
+                        return Err("Missing send directory after flag".into());
                     }
                 }
                 "-s" | "--single-port" => {
@@ -117,7 +117,9 @@ impl Config {
                     println!(
                         "  -p, --port <PORT>\t\tSet the listening port of the server (default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the serving directory (default: Current Working Directory)");
+                    println!("  -d, --directory <DIRECTORY>\tSet the serving directory (default: current working directory)");
+                    println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files to (default: the directory setting)");
+                    println!("  -sd, --send-directory <DIRECTORY>\tSet the directory to send files from (default: the directory setting)");
                     println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 0)");
@@ -149,6 +151,13 @@ impl Config {
             }
         }
 
+        if config.receive_directory == PathBuf::new() {
+            config.receive_directory = config.directory.clone();
+        }
+        if config.send_directory == PathBuf::new() {
+            config.send_directory = config.directory.clone();
+        }
+
         Ok(config)
     }
 }
@@ -160,17 +169,19 @@ mod tests {
     #[test]
     fn parses_full_config() {
         let config = Config::new(
-            ["/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "--updir", "/", "--downdir", "/","-s", "-r"]
-                .iter()
-                .map(|s| s.to_string()),
+            [
+                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
         )
         .unwrap();
 
         assert_eq!(config.ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 1234);
-        assert_eq!(config.directory, "/");
-        assert_eq!(config.up_directory, "/");
-        assert_eq!(config.down_directory, "/");
+        assert_eq!(config.directory, PathBuf::from("/"));
+        assert_eq!(config.receive_directory, PathBuf::from("/"));
+        assert_eq!(config.send_directory, PathBuf::from("/"));
         assert!(config.single_port);
         assert!(config.read_only);
     }
@@ -186,7 +197,21 @@ mod tests {
 
         assert_eq!(config.ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 69);
-        assert_eq!(config.directory, "/");
+        assert_eq!(config.directory, PathBuf::from("/"));
+    }
+
+    #[test]
+    fn sets_receive_directory_to_directory() {
+        let config = Config::new(["/", "-d", "/"].iter().map(|s| s.to_string())).unwrap();
+
+        assert_eq!(config.receive_directory, PathBuf::from("/"));
+    }
+
+    #[test]
+    fn sets_send_directory_to_directory() {
+        let config = Config::new(["/", "-d", "/"].iter().map(|s| s.to_string())).unwrap();
+
+        assert_eq!(config.send_directory, PathBuf::from("/"));
     }
 
     #[test]
@@ -217,7 +242,7 @@ mod tests {
     #[test]
     fn returns_error_on_invalid_up_directory() {
         assert!(Config::new(
-            ["/", "--updir", "/this/does/not/exist"]
+            ["/", "-ud", "/this/does/not/exist"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -227,7 +252,7 @@ mod tests {
     #[test]
     fn returns_error_on_invalid_down_directory() {
         assert!(Config::new(
-            ["/", "--downdir", "/this/does/not/exist"]
+            ["/", "-dd", "/this/does/not/exist"]
                 .iter()
                 .map(|s| s.to_string()),
         )
