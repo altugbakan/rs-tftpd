@@ -1,6 +1,6 @@
 #![cfg(feature = "integration")]
 
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, remove_dir_all};
 use std::process::{Child, Command, ExitStatus};
 
 const SERVER_DIR: &str = "target/integration/server";
@@ -41,8 +41,18 @@ fn test_send() {
     initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
-    let mut client =
-        CommandRunner::new("time", &["atftp", "-g", "-r", file_name, "127.0.0.1", port]);
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
+            "-g",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "127.0.0.1",
+            port,
+        ],
+    );
 
     let status = client.wait();
     assert!(status.success());
@@ -56,9 +66,56 @@ fn test_receive() {
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
     let mut client = CommandRunner::new(
-        "time",
+        "atftp",
         &[
-            "atftp",
+            "-p",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "127.0.0.1",
+            port,
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+}
+
+#[test]
+fn test_send_dir() {
+    let file_name = "send_dir";
+    let port = "6971";
+    initialize(format!("{SERVER_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-sd", SERVER_DIR]);
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
+            "-g",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "127.0.0.1",
+            port,
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+}
+
+#[test]
+fn test_receive_dir() {
+    let file_name = "receive_dir";
+    let port = "6972";
+    initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-rd", SERVER_DIR]);
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
             "-p",
             "-r",
             file_name,
@@ -79,6 +136,8 @@ fn initialize(file_name: &str) {
 }
 
 fn create_folders() {
+    let _ = remove_dir_all(SERVER_DIR);
+    let _ = remove_dir_all(CLIENT_DIR);
     create_dir_all(SERVER_DIR).expect("error creating server directory");
     create_dir_all(CLIENT_DIR).expect("error creating client directory");
 }

@@ -29,7 +29,8 @@ const DEFAULT_WINDOW_SIZE: u16 = 1;
 /// ```
 pub struct Server {
     socket: UdpSocket,
-    directory: PathBuf,
+    receive_directory: PathBuf,
+    send_directory: PathBuf,
     single_port: bool,
     read_only: bool,
     overwrite: bool,
@@ -42,10 +43,10 @@ impl Server {
     /// Creates the TFTP Server with the supplied [`Config`].
     pub fn new(config: &Config) -> Result<Server, Box<dyn Error>> {
         let socket = UdpSocket::bind(SocketAddr::from((config.ip_address, config.port)))?;
-
         let server = Server {
             socket,
-            directory: config.directory.clone(),
+            receive_directory: config.receive_directory.clone(),
+            send_directory: config.send_directory.clone(),
             single_port: config.single_port,
             read_only: config.read_only,
             overwrite: config.overwrite,
@@ -132,8 +133,8 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(filename);
-        match check_file_exists(file_path, &self.directory) {
+        let file_path = &self.send_directory.join(filename);
+        match check_file_exists(file_path, &self.send_directory) {
             ErrorCode::FileNotFound => Socket::send_to(
                 &self.socket,
                 &Packet::Error {
@@ -195,7 +196,7 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.directory.join(file_name);
+        let file_path = &self.receive_directory.join(file_name);
         let initialize_write = &mut || -> Result<(), Box<dyn Error>> {
             let worker_options = parse_options(options, RequestType::Write)?;
             let mut socket: Box<dyn Socket>;
@@ -226,7 +227,7 @@ impl Server {
             worker.receive()
         };
 
-        match check_file_exists(file_path, &self.directory) {
+        match check_file_exists(file_path, &self.receive_directory) {
             ErrorCode::FileExists => {
                 if self.overwrite {
                     initialize_write()
