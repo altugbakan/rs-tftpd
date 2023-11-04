@@ -136,8 +136,8 @@ fn initialize(file_name: &str) {
 }
 
 fn create_folders() {
-    remove_dir_all(SERVER_DIR).expect("error removing server directory");
-    remove_dir_all(CLIENT_DIR).expect("error removing client directory");
+    let _ = remove_dir_all(SERVER_DIR);
+    let _ = remove_dir_all(CLIENT_DIR);
     create_dir_all(SERVER_DIR).expect("error creating server directory");
     create_dir_all(CLIENT_DIR).expect("error creating client directory");
 }
