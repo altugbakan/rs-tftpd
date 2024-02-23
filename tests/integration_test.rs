@@ -130,6 +130,60 @@ fn test_receive_dir() {
     assert!(status.success());
 }
 
+#[test]
+fn test_send_ipv6() {
+    let file_name = "send_ipv6";
+    let port = "6973";
+    initialize(format!("{SERVER_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-i", "::1", "-p", port, "-d", SERVER_DIR],
+    );
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
+            "-g",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "::1",
+            port,
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+}
+
+#[test]
+fn test_receive_ipv6() {
+    let file_name = "receive_ipv6";
+    let port = "6974";
+    initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-i", "::1", "-p", port, "-d", SERVER_DIR],
+    );
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
+            "-p",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "::1",
+            port,
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+}
+
 fn initialize(file_name: &str) {
     create_folders();
     create_file(file_name);
