@@ -1,4 +1,4 @@
-use std::{env, process};
+use std::{env, net::SocketAddr, process};
 use tftpd::{Config, Server};
 
 fn main() {
@@ -17,16 +17,14 @@ fn main() {
 
     if config.receive_directory == config.send_directory {
         println!(
-            "Running TFTP Server on {}:{} in {}",
-            config.ip_address,
-            config.port,
+            "Running TFTP Server on {} in {}",
+            SocketAddr::new(config.ip_address, config.port),
             config.directory.display()
         );
     } else {
         println!(
-            "Running TFTP Server on {}:{}. Sending from {}, receiving to {}",
-            config.ip_address,
-            config.port,
+            "Running TFTP Server on {}. Sending from {}, receiving to {}",
+            SocketAddr::new(config.ip_address, config.port),
             config.send_directory.display(),
             config.receive_directory.display(),
         );

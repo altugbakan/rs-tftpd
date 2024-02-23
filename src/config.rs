@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
@@ -20,7 +20,7 @@ use std::{env, process};
 /// ```
 pub struct Config {
     /// Local IP address of the TFTP Server. (default: 127.0.0.1)
-    pub ip_address: Ipv4Addr,
+    pub ip_address: IpAddr,
     /// Local Port number of the TFTP Server. (default: 69)
     pub port: u16,
     /// Default directory of the TFTP Server. (default: current working directory)
@@ -44,7 +44,7 @@ impl Config {
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<Config, Box<dyn Error>> {
         let mut config = Config {
-            ip_address: Ipv4Addr::new(127, 0, 0, 1),
+            ip_address: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             port: 69,
             directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
             receive_directory: PathBuf::new(),
@@ -61,7 +61,8 @@ impl Config {
             match arg.as_str() {
                 "-i" | "--ip-address" => {
                     if let Some(ip_str) = args.next() {
-                        config.ip_address = ip_str.parse::<Ipv4Addr>()?;
+                        let ip_addr: IpAddr = ip_str.parse()?;
+                        config.ip_address = ip_addr;
                     } else {
                         return Err("Missing ip address after flag".into());
                     }
@@ -164,6 +165,8 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv6Addr;
+
     use super::*;
 
     #[test]
@@ -184,6 +187,19 @@ mod tests {
         assert_eq!(config.send_directory, PathBuf::from("/"));
         assert!(config.single_port);
         assert!(config.read_only);
+    }
+
+    #[test]
+    fn parses_config_with_ipv6() {
+        let config = Config::new(
+            ["/", "-i", "0:0:0:0:0:0:0:0", "-p", "1234"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(config.ip_address, Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0));
+        assert_eq!(config.port, 1234);
     }
 
     #[test]
