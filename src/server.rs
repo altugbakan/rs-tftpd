@@ -184,7 +184,7 @@ impl Server {
                     worker_options.window_size,
                     self.duplicate_packets + 1,
                 );
-                worker.send()
+                worker.send(!options.is_empty())
             }
             _ => Err("Unexpected error code when checking file".into()),
         }
@@ -349,24 +349,8 @@ fn accept_request<T: Socket>(
 ) -> Result<(), Box<dyn Error>> {
     if !options.is_empty() {
         socket.send(&Packet::Oack(options.to_vec()))?;
-        if let RequestType::Read(_) = request_type {
-            check_response(socket)?;
-        }
     } else if request_type == RequestType::Write {
         socket.send(&Packet::Ack(0))?;
-    }
-
-    Ok(())
-}
-
-fn check_response<T: Socket>(socket: &T) -> Result<(), Box<dyn Error>> {
-    if let Packet::Ack(received_block_number) = socket.recv()? {
-        if received_block_number != 0 {
-            socket.send(&Packet::Error {
-                code: ErrorCode::IllegalOperation,
-                msg: "invalid oack response".to_string(),
-            })?;
-        }
     }
 
     Ok(())

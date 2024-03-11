@@ -1,4 +1,4 @@
-use crate::{Packet, Socket, Window};
+use crate::{ErrorCode, Packet, Socket, Window};
 use std::{
     error::Error,
     fs::{self, File},
@@ -69,13 +69,13 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     /// Sends a file to the remote [`SocketAddr`] that has sent a read request using
     /// a random port, asynchronously.
-    pub fn send(self) -> Result<(), Box<dyn Error>> {
+    pub fn send(self, rcv_oack_ack: bool) -> Result<(), Box<dyn Error>> {
         let file_name = self.file_name.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
         thread::spawn(move || {
             let handle_send = || -> Result<(), Box<dyn Error>> {
-                self.send_file(File::open(&file_name)?)?;
+                self.send_file(File::open(&file_name)?, rcv_oack_ack)?;
 
                 Ok(())
             };
@@ -130,10 +130,13 @@ impl<T: Socket + ?Sized> Worker<T> {
         Ok(())
     }
 
-    fn send_file(self, file: File) -> Result<(), Box<dyn Error>> {
+    fn send_file(self, file: File, rcv_oack_ack: bool) -> Result<(), Box<dyn Error>> {
         let mut block_number = 1;
         let mut window = Window::new(self.windowsize, self.blk_size, file);
 
+        if rcv_oack_ack {
+            self.check_response()?;
+        }
         loop {
             let filled = window.fill()?;
 
@@ -247,6 +250,19 @@ impl<T: Socket + ?Sized> Worker<T> {
                 std::thread::sleep(DEFAULT_DUPLICATE_DELAY);
             }
             self.socket.send(packet)?;
+        }
+
+        Ok(())
+    }
+
+    fn check_response(&self) -> Result<(), Box<dyn Error>> {
+        if let Packet::Ack(received_block_number) = self.socket.recv()? {
+            if received_block_number != 0 {
+                self.socket.send(&Packet::Error {
+                    code: ErrorCode::IllegalOperation,
+                    msg: "invalid oack response".to_string(),
+                })?;
+            }
         }
 
         Ok(())
