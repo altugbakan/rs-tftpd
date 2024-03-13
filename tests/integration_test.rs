@@ -184,6 +184,32 @@ fn test_receive_ipv6() {
     assert!(status.success());
 }
 
+#[test]
+fn test_send_single_port_options() {
+    let file_name = "send_single_port_options";
+    let port = "6975";
+    initialize(format!("{SERVER_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-s"]);
+    let mut client = CommandRunner::new(
+        "atftp",
+        &[
+            "-g",
+            "-r",
+            file_name,
+            "-l",
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "--option",
+            "windowsize 10",
+            "127.0.0.1",
+            port,
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+}
+
 fn initialize(file_name: &str) {
     create_folders();
     create_file(file_name);
