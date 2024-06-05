@@ -39,21 +39,27 @@ pub struct Config {
     pub overwrite: bool,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+	    ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+	    port: 69,
+	    directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
+            receive_directory: Default::default(),
+            send_directory: Default::default(),
+            single_port: Default::default(),
+            read_only: Default::default(),
+            duplicate_packets: Default::default(),
+            overwrite: Default::default(),
+	}
+    }
+}
+
 impl Config {
     /// Creates a new configuration by parsing the supplied arguments. It is
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<Config, Box<dyn Error>> {
-        let mut config = Config {
-            ip_address: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            port: 69,
-            directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
-            receive_directory: PathBuf::new(),
-            send_directory: PathBuf::new(),
-            single_port: false,
-            read_only: false,
-            duplicate_packets: 0,
-            overwrite: false,
-        };
+        let mut config = Config::default();
 
         args.next();
 
