@@ -33,7 +33,7 @@ pub struct Config {
     pub single_port: bool,
     /// Refuse all write requests, making the server read-only. (default: false)
     pub read_only: bool,
-    /// Duplicate all packets sent from the server. (default: 1)
+    /// Duplicate all packets sent from the server. (default: 0)
     pub duplicate_packets: u8,
     /// Overwrite existing files. (default: false)
     pub overwrite: bool,
