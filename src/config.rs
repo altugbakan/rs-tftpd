@@ -42,16 +42,16 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-	    ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
-	    port: 69,
-	    directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
+            ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+            port: 69,
+            directory: env::current_dir().unwrap_or_else(|_| env::temp_dir()),
             receive_directory: Default::default(),
             send_directory: Default::default(),
             single_port: Default::default(),
             read_only: Default::default(),
             duplicate_packets: Default::default(),
             overwrite: Default::default(),
-	}
+        }
     }
 }
 
@@ -159,10 +159,10 @@ impl Config {
         }
 
         if config.receive_directory == PathBuf::new() {
-            config.receive_directory = config.directory.clone();
+            config.receive_directory.clone_from(&config.directory);
         }
         if config.send_directory == PathBuf::new() {
-            config.send_directory = config.directory.clone();
+            config.send_directory.clone_from(&config.directory);
         }
 
         Ok(config)
