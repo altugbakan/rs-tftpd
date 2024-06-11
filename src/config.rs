@@ -158,10 +158,10 @@ impl Config {
             }
         }
 
-        if config.receive_directory == PathBuf::new() {
+        if config.receive_directory.as_os_str().is_empty() {
             config.receive_directory.clone_from(&config.directory);
         }
-        if config.send_directory == PathBuf::new() {
+        if config.send_directory.as_os_str().is_empty() {
             config.send_directory.clone_from(&config.directory);
         }
 
