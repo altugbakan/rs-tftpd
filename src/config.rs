@@ -118,6 +118,9 @@ impl Config {
                 }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
+                    #[cfg(feature = "client")]
+                    println!("Usage: tftpd server [OPTIONS]\n");
+                    #[cfg(not(feature = "client"))]
                     println!("Usage: tftpd [OPTIONS]\n");
                     println!("Options:");
                     println!("  -i, --ip-address <IP ADDRESS>\tSet the ip address of the server (default: 127.0.0.1)");

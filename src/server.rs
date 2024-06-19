@@ -184,7 +184,8 @@ impl Server {
                     worker_options.window_size,
                     self.duplicate_packets + 1,
                 );
-                worker.send(!options.is_empty())
+                worker.send(!options.is_empty())?;
+                Ok(())
             }
             _ => Err("Unexpected error code when checking file".into()),
         }
@@ -224,7 +225,8 @@ impl Server {
                 worker_options.window_size,
                 self.duplicate_packets + 1,
             );
-            worker.receive()
+            worker.receive()?;
+            Ok(())
         };
 
         match check_file_exists(file_path, &self.receive_directory) {

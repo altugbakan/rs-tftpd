@@ -17,7 +17,7 @@ Since TFTP servers do not offer any type of login or access control mechanisms, 
 
 Documentation for the project can be found in [docs.rs](https://docs.rs/tftpd/latest/tftpd/).
 
-## Usage
+## Usage (Server)
 
 To install the server using Cargo:
 
@@ -30,6 +30,32 @@ To run the server on the IP address `0.0.0.0`, read-only, on port `1234` in the 
 
 ```bash
 tftpd -i 0.0.0.0 -p 1234 -d "/home/user/tftp" -r
+```
+
+## Usage (Client)
+
+To install the client and server using Cargo:
+
+```bash
+cargo install --features client tftpd
+tftpd client --help
+tftpd server --help
+```
+
+To run the server on the IP address `0.0.0.0`, read-only, on port `1234` in the `/home/user/tftp` directory:
+
+```bash
+tftpd server -i 0.0.0.0 -p 1234 -d "/home/user/tftp" -r
+```
+
+To connect the client to a tftp server running on IP address `127.0.0.1`, read-only, on port `1234` and download a file named `example.file`
+```bash
+tftpd client example.file -i 0.0.0.0 -p 1234 -d
+```
+
+To connect the client to a tftp server running on IP address `127.0.0.1`, read-only, on port `1234` and upload a file named `example.file`
+```bash
+tftpd client ./example.file -i 0.0.0.0 -p 1234 -u
 ```
 
 ## License

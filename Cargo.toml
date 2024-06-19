@@ -11,3 +11,4 @@ categories = ["command-line-utilities"]
 
 [features]
 integration = []
+client = []

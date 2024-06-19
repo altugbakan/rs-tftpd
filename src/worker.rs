@@ -1,4 +1,5 @@
 use crate::{ErrorCode, Packet, Socket, Window};
+use std::thread::JoinHandle;
 use std::{
     error::Error,
     fs::{self, File},
@@ -70,11 +71,11 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     /// Sends a file to the remote [`SocketAddr`] that has sent a read request using
     /// a random port, asynchronously.
-    pub fn send(self, check_response: bool) -> Result<(), Box<dyn Error>> {
+    pub fn send(self, check_response: bool) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let file_name = self.file_name.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let handle_send = || -> Result<(), Box<dyn Error>> {
                 self.send_file(File::open(&file_name)?, check_response)?;
 
@@ -95,16 +96,16 @@ impl<T: Socket + ?Sized> Worker<T> {
             }
         });
 
-        Ok(())
+        Ok(handle)
     }
 
     /// Receives a file from the remote [`SocketAddr`] that has sent a write request using
     /// the supplied socket, asynchronously.
-    pub fn receive(self) -> Result<(), Box<dyn Error>> {
+    pub fn receive(self) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let file_name = self.file_name.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let handle_receive = || -> Result<(), Box<dyn Error>> {
                 self.receive_file(File::create(&file_name)?)?;
 
@@ -128,7 +129,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             }
         });
 
-        Ok(())
+        Ok(handle)
     }
 
     fn send_file(self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
