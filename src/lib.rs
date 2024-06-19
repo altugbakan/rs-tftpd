@@ -15,6 +15,11 @@
 //! Since TFTP servers do not offer any type of login or access control mechanisms, this server only allows
 //! transfer and receiving inside a chosen folder, and disallows external file access.
 
+#[cfg(feature = "client")]
+mod client;
+
+#[cfg(feature = "client")]
+mod client_config;
 mod config;
 mod convert;
 mod packet;
@@ -23,6 +28,12 @@ mod socket;
 mod window;
 mod worker;
 
+#[cfg(feature = "client")]
+pub use client::Client;
+#[cfg(feature = "client")]
+pub use client::Mode;
+#[cfg(feature = "client")]
+pub use client_config::ClientConfig;
 pub use config::Config;
 pub use convert::Convert;
 pub use packet::ErrorCode;

@@ -1,4 +1,6 @@
 use crate::Convert;
+#[cfg(feature = "client")]
+use std::time::Duration;
 use std::{error::Error, fmt, str::FromStr};
 
 /// Packet `enum` represents the valid TFTP packet types.
@@ -64,19 +66,28 @@ impl Packet {
             Opcode::Rrq | Opcode::Wrq => parse_rq(buf, opcode),
             Opcode::Data => parse_data(buf),
             Opcode::Ack => parse_ack(buf),
+            Opcode::Oack => parse_oack(buf),
             Opcode::Error => parse_error(buf),
-            _ => Err("Invalid packet".into()),
         }
     }
 
     /// Serializes a [`Packet`] into a [`Vec<u8>`].
     pub fn serialize(&self) -> Result<Vec<u8>, &'static str> {
         match self {
+            Packet::Rrq {
+                filename,
+                mode,
+                options,
+            } => Ok(serialize_rrq(filename, mode, options)),
+            Packet::Wrq {
+                filename,
+                mode,
+                options,
+            } => Ok(serialize_wrq(filename, mode, options)),
             Packet::Data { block_num, data } => Ok(serialize_data(block_num, data)),
             Packet::Ack(block_num) => Ok(serialize_ack(block_num)),
             Packet::Error { code, msg } => Ok(serialize_error(code, msg)),
             Packet::Oack(options) => Ok(serialize_oack(options)),
-            _ => Err("Invalid packet"),
         }
     }
 }
@@ -191,6 +202,18 @@ pub enum OptionType {
     /// Windowsize option type
     Windowsize,
 }
+
+#[cfg(feature = "client")]
+/// Default Timeout
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[cfg(feature = "client")]
+/// Default Blocksize
+pub const DEFAULT_BLOCKSIZE: usize = 512;
+
+#[cfg(feature = "client")]
+/// Default Windowsize
+pub const DEFAULT_WINDOWSIZE: u16 = 1;
 
 impl OptionType {
     /// Converts an [`OptionType`] to a [`str`].
@@ -339,6 +362,26 @@ fn parse_ack(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     Ok(Packet::Ack(Convert::to_u16(&buf[2..])?))
 }
 
+fn parse_oack(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
+    let mut options = vec![];
+    let mut value: String;
+    let mut option;
+    let mut zero_index = 1usize;
+
+    while zero_index < buf.len() - 1 {
+        (option, zero_index) = Convert::to_string(buf, zero_index + 1)?;
+        (value, zero_index) = Convert::to_string(buf, zero_index + 1)?;
+        if let Ok(option) = OptionType::from_str(option.to_lowercase().as_str()) {
+            options.push(TransferOption {
+                option,
+                value: value.parse()?,
+            });
+        }
+    }
+
+    Ok(Packet::Oack(options))
+}
+
 fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     let code = ErrorCode::from_u16(Convert::to_u16(&buf[2..])?)?;
     if let Ok((msg, _)) = Convert::to_string(buf, 4) {
@@ -349,6 +392,38 @@ fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
             msg: "(no message)".to_string(),
         })
     }
+}
+
+fn serialize_rrq(file: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
+    let mut buf = [
+        &Opcode::Rrq.as_bytes(),
+        file.as_bytes(),
+        &[0x00],
+        mode.as_bytes(),
+        &[0x00],
+    ]
+    .concat();
+
+    for option in options {
+        buf = [buf, option.as_bytes()].concat();
+    }
+    buf
+}
+
+fn serialize_wrq(file: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
+    let mut buf = [
+        &Opcode::Wrq.as_bytes(),
+        file.as_bytes(),
+        &[0x00],
+        mode.as_bytes(),
+        &[0x00],
+    ]
+    .concat();
+
+    for option in options {
+        buf = [buf, option.as_bytes()].concat();
+    }
+    buf
 }
 
 fn serialize_data(block_num: &u16, data: &Vec<u8>) -> Vec<u8> {
@@ -577,6 +652,53 @@ mod tests {
     }
 
     #[test]
+    fn parses_oack() {
+        let buf = [
+            &Opcode::Oack.as_bytes()[..],
+            (OptionType::TransferSize.as_str().as_bytes()),
+            &[0x00],
+            ("0".as_bytes()),
+            &[0x00],
+            (OptionType::Timeout.as_str().as_bytes()),
+            &[0x00],
+            ("5".as_bytes()),
+            &[0x00],
+            (OptionType::Windowsize.as_str().as_bytes()),
+            &[0x00],
+            ("4".as_bytes()),
+            &[0x00],
+        ]
+        .concat();
+
+        if let Ok(Packet::Oack(options)) = parse_oack(&buf) {
+            assert_eq!(options.len(), 3);
+            assert_eq!(
+                options[0],
+                TransferOption {
+                    option: OptionType::TransferSize,
+                    value: 0
+                }
+            );
+            assert_eq!(
+                options[1],
+                TransferOption {
+                    option: OptionType::Timeout,
+                    value: 5
+                }
+            );
+            assert_eq!(
+                options[2],
+                TransferOption {
+                    option: OptionType::Windowsize,
+                    value: 4
+                }
+            );
+        } else {
+            panic!("cannot parse read request with options")
+        }
+    }
+
+    #[test]
     fn parses_error() {
         let buf = [
             &Opcode::Error.as_bytes()[..],
@@ -609,6 +731,98 @@ mod tests {
         } else {
             panic!("cannot parse error")
         }
+    }
+
+    #[test]
+    fn serializes_rrq() {
+        let serialized_data = vec![0x00, 0x01, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00];
+
+        assert_eq!(
+            serialize_rrq(
+                &"test".into(),
+                &"octet".into(),
+                &vec![]
+            ),
+            serialized_data
+        )
+    }
+
+    #[test]
+    fn serializes_rrq_with_options() {
+        let serialized_data = vec![
+            0x00, 0x01, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00, 0x62,
+            0x6c, 0x6b, 0x73, 0x69, 0x7a, 0x65, 0x00, 0x31, 0x34, 0x36, 0x38, 0x00, 0x77, 0x69,
+            0x6e, 0x64, 0x6f, 0x77, 0x73, 0x69, 0x7a, 0x65, 0x00, 0x31, 0x00, 0x74, 0x69, 0x6d,
+            0x65, 0x6f, 0x75, 0x74, 0x00, 0x35, 0x00,
+        ];
+
+        assert_eq!(
+            serialize_rrq(
+                &"test".into(),
+                &"octet".into(),
+                &vec![
+                    TransferOption {
+                        option: OptionType::BlockSize,
+                        value: 1468,
+                    },
+                    TransferOption {
+                        option: OptionType::Windowsize,
+                        value: 1,
+                    },
+                    TransferOption {
+                        option: OptionType::Timeout,
+                        value: 5,
+                    }
+                ]
+            ),
+            serialized_data
+        )
+    }
+
+    #[test]
+    fn serializes_wrq() {
+        let serialized_data = vec![0x00, 0x02, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00];
+
+        assert_eq!(
+            serialize_wrq(
+                &"test".into(),
+                &"octet".into(),
+                &vec![]
+            ),
+            serialized_data
+        )
+    }
+
+    #[test]
+    fn serializes_wrq_with_options() {
+        let serialized_data = vec![
+            0x00, 0x02, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00, 0x62,
+            0x6c, 0x6b, 0x73, 0x69, 0x7a, 0x65, 0x00, 0x31, 0x34, 0x36, 0x38, 0x00, 0x77, 0x69,
+            0x6e, 0x64, 0x6f, 0x77, 0x73, 0x69, 0x7a, 0x65, 0x00, 0x31, 0x00, 0x74, 0x69, 0x6d,
+            0x65, 0x6f, 0x75, 0x74, 0x00, 0x35, 0x00,
+        ];
+
+        assert_eq!(
+            serialize_wrq(
+                &"test".into(),
+                &"octet".into(),
+                &vec![
+                    TransferOption {
+                        option: OptionType::BlockSize,
+                        value: 1468,
+                    },
+                    TransferOption {
+                        option: OptionType::Windowsize,
+                        value: 1,
+                    },
+                    TransferOption {
+                        option: OptionType::Timeout,
+                        value: 5,
+                    }
+                ]
+            ),
+            serialized_data
+        )
     }
 
     #[test]
