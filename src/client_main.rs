@@ -1,11 +1,9 @@
 use std::error::Error;
-use std::env::args;
 use std::{env, net::SocketAddr, process};
-use tftpd::{Client, ClientConfig, Config, Mode, Server};
+use tftpd::{Client, ClientConfig, Mode};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    client(args[0..].iter().map(|s| s.to_string())).unwrap_or_else(|err| {
+    client(env::args()).unwrap_or_else(|err| {
             eprintln!("{err}");
     })
 }

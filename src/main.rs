@@ -2,8 +2,7 @@ use std::{env, net::SocketAddr, process};
 use tftpd::{Config, Server};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    server(args[0..].iter().map(|s| s.to_string()));
+    server(env::args());
 }
 
 fn server<T: Iterator<Item = String>>(args: T) {
