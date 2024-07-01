@@ -62,14 +62,6 @@ impl ClientConfig {
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<ClientConfig, Box<dyn Error>> {
         let mut config = ClientConfig::default();
 
-        args.next();
-
-        if let Some(file_name) = args.next() {
-            config.filename = PathBuf::from(file_name);
-        } else {
-            return Err("Missing file to upload or download".into());
-        }
-
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "-i" | "--ip-address" => {
@@ -139,8 +131,9 @@ impl ClientConfig {
                     println!("  -h, --help\t\t\tPrint help information");
                     process::exit(0);
                 }
-
-                invalid => return Err(format!("Invalid flag: {invalid}").into()),
+                file_name => {
+                    config.filename = PathBuf::from(file_name);
+                }
             }
         }
 
