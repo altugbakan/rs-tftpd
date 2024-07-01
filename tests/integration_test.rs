@@ -2,6 +2,8 @@
 
 use std::fs::{create_dir_all, remove_dir_all};
 use std::process::{Child, Command, ExitStatus};
+use std::thread;
+use std::time::Duration;
 
 const SERVER_DIR: &str = "target/integration/server";
 const CLIENT_DIR: &str = "target/integration/client";
@@ -41,6 +43,7 @@ fn test_send() {
     initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -65,6 +68,7 @@ fn test_receive() {
     initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -89,6 +93,7 @@ fn test_send_dir() {
     initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-sd", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -104,6 +109,8 @@ fn test_send_dir() {
 
     let status = client.wait();
     assert!(status.success());
+
+    check_files(file_name);
 }
 
 #[test]
@@ -113,6 +120,7 @@ fn test_receive_dir() {
     initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-rd", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -128,6 +136,8 @@ fn test_receive_dir() {
 
     let status = client.wait();
     assert!(status.success());
+
+    check_files(file_name);
 }
 
 #[test]
@@ -140,6 +150,7 @@ fn test_send_ipv6() {
         "target/debug/tftpd",
         &["-i", "::1", "-p", port, "-d", SERVER_DIR],
     );
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -155,6 +166,8 @@ fn test_send_ipv6() {
 
     let status = client.wait();
     assert!(status.success());
+
+    check_files(file_name);
 }
 
 #[test]
@@ -167,6 +180,7 @@ fn test_receive_ipv6() {
         "target/debug/tftpd",
         &["-i", "::1", "-p", port, "-d", SERVER_DIR],
     );
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -182,6 +196,8 @@ fn test_receive_ipv6() {
 
     let status = client.wait();
     assert!(status.success());
+
+    check_files(file_name);
 }
 
 #[test]
@@ -191,6 +207,7 @@ fn test_send_single_port_options() {
     initialize(format!("{SERVER_DIR}/{file_name}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-s"]);
+    thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "atftp",
         &[
@@ -208,6 +225,60 @@ fn test_send_single_port_options() {
 
     let status = client.wait();
     assert!(status.success());
+
+    check_files(file_name);
+}
+
+#[test]
+fn test_client_send() {
+    let file_name = "client_send";
+    let port = "6980";
+    initialize(format!("{CLIENT_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
+
+    let mut client = CommandRunner::new(
+        "target/debug/tftpc",
+        &[
+            format!("{CLIENT_DIR}/{file_name}").as_str(),
+            "-p",
+            port,
+            "-u",
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+
+    check_files(file_name);
+}
+
+#[test]
+fn test_client_receive() {
+    let file_name = "client_receive";
+    let port = "6981";
+    initialize(format!("{SERVER_DIR}/{file_name}").as_str());
+
+    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
+    thread::sleep(Duration::from_secs(1));
+
+    let mut client = CommandRunner::new(
+        "target/debug/tftpc",
+        &[
+            file_name,
+            "-p",
+            port,
+            "-d",
+            "-rd",
+            format!("{CLIENT_DIR}").as_str(),
+        ],
+    );
+
+    let status = client.wait();
+    assert!(status.success());
+
+    check_files(file_name);
 }
 
 fn initialize(file_name: &str) {
@@ -234,4 +305,14 @@ fn create_file(file_name: &str) {
         .expect("error creating test file")
         .wait()
         .expect("error waiting for test file creation");
+}
+
+fn check_files(file_name: &str) {
+    let server_file = format!("{SERVER_DIR}/{file_name}");
+    let client_file = format!("{CLIENT_DIR}/{file_name}");
+
+    let server_content = std::fs::read(server_file).expect("error reading server file");
+    let client_content = std::fs::read(client_file).expect("error reading client file");
+
+    assert_eq!(server_content, client_content);
 }

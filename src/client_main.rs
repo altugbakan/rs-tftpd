@@ -4,7 +4,7 @@ use tftpd::{Client, ClientConfig, Mode};
 
 fn main() {
     client(env::args()).unwrap_or_else(|err| {
-            eprintln!("{err}");
+        eprintln!("{err}");
     })
 }
 
@@ -27,7 +27,7 @@ fn client<T: Iterator<Item = String>>(args: T) -> Result<(), Box<dyn Error>> {
         );
     } else {
         println!(
-            "Starting TFTP Client, downloading {} to {}",
+            "Starting TFTP Client, downloading {} from {}",
             config.filename.display(),
             SocketAddr::new(config.remote_ip_address, config.port),
         );

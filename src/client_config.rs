@@ -23,9 +23,9 @@ use std::time::Duration;
 /// ```
 #[derive(Debug)]
 pub struct ClientConfig {
-    /// Local IP address of the TFTP Server. (default: 127.0.0.1)
+    /// Local IP address of the TFTP Client. (default: 127.0.0.1)
     pub remote_ip_address: IpAddr,
-    /// Local Port number of the TFTP Server. (default: 69)
+    /// Local Port number of the TFTP Client. (default: 69)
     pub port: u16,
     /// Blocksize to use during transfer. (default: 512)
     pub blocksize: usize,
@@ -35,8 +35,8 @@ pub struct ClientConfig {
     pub timeout: Duration,
     /// Upload or Download a file. (default: Download)
     pub mode: Mode,
-    /// Directory where to save downloaded files. (default: Current Working Directory)
-    pub save_directory: PathBuf,
+    /// Download directory of the TFTP Client. (default: current working directory)
+    pub receive_directory: PathBuf,
     /// File to Upload or Download.
     pub filename: PathBuf,
 }
@@ -50,7 +50,7 @@ impl Default for ClientConfig {
             windowsize: DEFAULT_WINDOWSIZE,
             timeout: DEFAULT_TIMEOUT,
             mode: Mode::Download,
-            save_directory: Default::default(),
+            receive_directory: Default::default(),
             filename: Default::default(),
         }
     }
@@ -100,14 +100,14 @@ impl ClientConfig {
                         return Err("Missing timeout after flag".into());
                     }
                 }
-                "-sd" | "--save-directory" => {
+                "-rd" | "--receive-directory" => {
                     if let Some(dir_str) = args.next() {
                         if !Path::new(&dir_str).exists() {
                             return Err(format!("{dir_str} does not exist").into());
                         }
-                        config.save_directory = dir_str.into();
+                        config.receive_directory = dir_str.into();
                     } else {
-                        return Err("Missing save directory after flag".into());
+                        return Err("Missing receive directory after flag".into());
                     }
                 }
                 "-u" | "--upload" => {
@@ -120,15 +120,17 @@ impl ClientConfig {
                     println!("TFTP Client\n");
                     println!("Usage: tftpd client <File> [OPTIONS]\n");
                     println!("Options:");
-                    println!("  -i, --ip-address <IP ADDRESS>\tIp address of the server (default: 127.0.0.1)");
-                    println!("  -p, --port <PORT>\t\tPort of the server (default: 69)");
-                    println!("  -b, --blocksize <number>\tSets the blocksize (default: 512)");
-                    println!("  -w, --windowsize <number>\tSets the windowsize (default: 1)");
-                    println!("  -t, --timeout <seconds>\tSets the timeout in seconds (default: 5)");
-                    println!("  -u, --upload\t\t\tSets the client to upload mode, Ignores all previous download flags");
-                    println!("  -d, --download\t\tSet the client to download mode, Invalidates all previous upload flags");
-                    println!("  -sd, --save-directory <DIRECTORY>\tSet the directory to save files when in Download Mode (default: the directory setting)");
-                    println!("  -h, --help\t\t\tPrint help information");
+                    println!("  -i, --ip-address <IP ADDRESS>\t\tIp address of the server (default: 127.0.0.1)");
+                    println!("  -p, --port <PORT>\t\t\tPort of the server (default: 69)");
+                    println!("  -b, --blocksize <number>\t\tSets the blocksize (default: 512)");
+                    println!("  -w, --windowsize <number>\t\tSets the windowsize (default: 1)");
+                    println!(
+                        "  -t, --timeout <seconds>\t\tSets the timeout in seconds (default: 5)"
+                    );
+                    println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
+                    println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
+                    println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
+                    println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
                 file_name => {
@@ -166,7 +168,7 @@ mod tests {
                 "-w",
                 "2",
                 "-t",
-                "4"
+                "4",
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -175,7 +177,7 @@ mod tests {
 
         assert_eq!(config.remote_ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 1234);
-        assert_eq!(config.save_directory, PathBuf::from("/"));
+        assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.filename, PathBuf::from("test.file"));
         assert_eq!(config.windowsize, 2);
         assert_eq!(config.blocksize, 1024);
@@ -183,21 +185,12 @@ mod tests {
         assert_eq!(config.timeout, Duration::from_secs(4));
     }
 
-
     #[test]
     fn parses_partial_config() {
         let config = ClientConfig::new(
-            [
-                "client",
-                "test.file",
-                "-d",
-                "-b",
-                "2048",
-                "-p",
-                "2000",
-            ]
-            .iter()
-            .map(|s| s.to_string()),
+            ["client", "test.file", "-d", "-b", "2048", "-p", "2000"]
+                .iter()
+                .map(|s| s.to_string()),
         )
         .unwrap();
 

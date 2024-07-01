@@ -118,23 +118,20 @@ impl Config {
                 }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
-                    #[cfg(feature = "client")]
-                    println!("Usage: tftpd server [OPTIONS]\n");
-                    #[cfg(not(feature = "client"))]
                     println!("Usage: tftpd [OPTIONS]\n");
                     println!("Options:");
-                    println!("  -i, --ip-address <IP ADDRESS>\tSet the ip address of the server (default: 127.0.0.1)");
+                    println!("  -i, --ip-address <IP ADDRESS>\t\tSet the ip address of the server (default: 127.0.0.1)");
                     println!(
-                        "  -p, --port <PORT>\t\tSet the listening port of the server (default: 69)"
+                        "  -p, --port <PORT>\t\t\tSet the listening port of the server (default: 69)"
                     );
-                    println!("  -d, --directory <DIRECTORY>\tSet the serving directory (default: current working directory)");
+                    println!("  -d, --directory <DIRECTORY>\t\tSet the serving directory (default: current working directory)");
                     println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files to (default: the directory setting)");
                     println!("  -sd, --send-directory <DIRECTORY>\tSet the directory to send files from (default: the directory setting)");
-                    println!("  -s, --single-port\t\tUse a single port for both sending and receiving (default: false)");
-                    println!("  -r, --read-only\t\tRefuse all write requests, making the server read-only (default: false)");
-                    println!("  --duplicate-packets <NUM>\tDuplicate all packets sent from the server (default: 0)");
-                    println!("  --overwrite\t\t\tOverwrite existing files (default: false)");
-                    println!("  -h, --help\t\t\tPrint help information");
+                    println!("  -s, --single-port\t\t\tUse a single port for both sending and receiving (default: false)");
+                    println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
+                    println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
+                    println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
+                    println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
                 "--duplicate-packets" => {

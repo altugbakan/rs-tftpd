@@ -51,7 +51,7 @@ impl Client {
             timeout: config.timeout,
             mode: config.mode,
             filename: config.filename.clone(),
-            save_path: config.save_directory.clone(),
+            save_path: config.receive_directory.clone(),
         })
     }
 
@@ -73,14 +73,20 @@ impl Client {
         } else {
             UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
         };
-        let file = self.filename.clone();
 
+        let file_name = self
+            .filename
+            .file_name()
+            .ok_or("Invalid filename")?
+            .to_str()
+            .ok_or("Filename is not valid UTF-8")?
+            .to_owned();
         let size = File::open(self.filename.clone())?.metadata()?.len() as usize;
 
         Socket::send_to(
             &socket,
             &Packet::Wrq {
-                filename: file.into_os_string().into_string().unwrap(),
+                filename: file_name,
                 mode: "octet".into(),
                 options: vec![
                     TransferOption {
@@ -98,7 +104,7 @@ impl Client {
                     TransferOption {
                         option: OptionType::TransferSize,
                         value: size,
-                    }
+                    },
                 ],
             },
             &self.remote_address,
@@ -174,7 +180,7 @@ impl Client {
                     TransferOption {
                         option: OptionType::TransferSize,
                         value: 0,
-                    }
+                    },
                 ],
             },
             &self.remote_address,

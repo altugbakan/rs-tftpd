@@ -43,13 +43,15 @@ tftpc --help
 ```
 
 To connect the client to a tftp server running on IP address `127.0.0.1`, read-only, on port `1234` and download a file named `example.file`
+
 ```bash
 tftpc example.file -i 0.0.0.0 -p 1234 -d
 ```
 
 To connect the client to a tftp server running on IP address `127.0.0.1`, read-only, on port `1234` and upload a file named `example.file`
+
 ```bash
-tftpc ./example.file -i 0.0.0.0 -p 1234 -u
+tftpc example.file -i 0.0.0.0 -p 1234 -u
 ```
 
 ## License
