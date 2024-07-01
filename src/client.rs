@@ -55,8 +55,8 @@ impl Client {
         })
     }
 
-    /// Starts the Client depending on the [`Mode`] the client is in
-    pub fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    /// Run the Client depending on the [`Mode`] the client is in
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         match self.mode {
             Mode::Upload => self.upload(),
             Mode::Download => self.download(),

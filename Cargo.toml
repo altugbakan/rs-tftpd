@@ -9,6 +9,15 @@ license = "MIT"
 keywords = ["tftp", "server"]
 categories = ["command-line-utilities"]
 
+[[bin]]
+name = "tftpc"
+path = "src/client_main.rs"
+required-features = ["client"]
+
+[[bin]]
+name = "tftpd"
+path = "src/main.rs"
+
 [features]
 integration = []
 client = []
