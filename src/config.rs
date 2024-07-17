@@ -38,7 +38,7 @@ pub struct Config {
     /// Overwrite existing files. (default: false)
     pub overwrite: bool,
     /// Should clean (delete) files after receiving errors. (default: true)
-    pub clean_on_error: bool
+    pub clean_on_error: bool,
 }
 
 impl Default for Config {
@@ -53,7 +53,7 @@ impl Default for Config {
             read_only: Default::default(),
             duplicate_packets: Default::default(),
             overwrite: Default::default(),
-            clean_on_error: true
+            clean_on_error: true,
         }
     }
 }
@@ -186,7 +186,20 @@ mod tests {
     fn parses_full_config() {
         let config = Config::new(
             [
-                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r", "--keep-on-error"
+                "/",
+                "-i",
+                "0.0.0.0",
+                "-p",
+                "1234",
+                "-d",
+                "/",
+                "-rd",
+                "/",
+                "-sd",
+                "/",
+                "-s",
+                "-r",
+                "--keep-on-error",
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -198,7 +211,7 @@ mod tests {
         assert_eq!(config.directory, PathBuf::from("/"));
         assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.send_directory, PathBuf::from("/"));
-        assert_eq!(config.clean_on_error, false);
+        assert!(!config.clean_on_error);
         assert!(config.single_port);
         assert!(config.read_only);
     }

@@ -126,14 +126,14 @@ mod tests {
 
     #[test]
     fn fills_and_removes_from_window() {
-        const FILE_NAME: &str = "fills_and_removes_from_window.txt";
+        const FILENAME: &str = "fills_and_removes_from_window.txt";
 
-        let mut file = initialize(FILE_NAME);
+        let mut file = initialize(FILENAME);
         file.write_all(b"Hello, world!").unwrap();
         file.flush().unwrap();
         drop(file);
 
-        file = open(FILE_NAME);
+        file = open(FILENAME);
 
         let mut window = Window::new(2, 5, file);
         window.fill().unwrap();
@@ -150,14 +150,14 @@ mod tests {
         assert_eq!(window.elements[0], b", wor"[..]);
         assert_eq!(window.elements[1], b"ld!"[..]);
 
-        clean(FILE_NAME);
+        clean(FILENAME);
     }
 
     #[test]
     fn adds_to_and_empties_window() {
-        const FILE_NAME: &str = "adds_to_and_empties_window.txt";
+        const FILENAME: &str = "adds_to_and_empties_window.txt";
 
-        let file = initialize(FILE_NAME);
+        let file = initialize(FILENAME);
 
         let mut window = Window::new(3, 5, file);
         window.add(b"Hello".to_vec()).unwrap();
@@ -180,46 +180,46 @@ mod tests {
 
         let mut contents = Default::default();
         File::read_to_string(
-            &mut File::open(DIR_NAME.to_string() + "/" + FILE_NAME).unwrap(),
+            &mut File::open(DIR_NAME.to_string() + "/" + FILENAME).unwrap(),
             &mut contents,
         )
         .unwrap();
         assert_eq!(contents, "Hello, world!");
 
-        clean(FILE_NAME);
+        clean(FILENAME);
     }
 
-    fn initialize(file_name: &str) -> File {
-        let file_name = DIR_NAME.to_string() + "/" + file_name;
+    fn initialize(filename: &str) -> File {
+        let filename = DIR_NAME.to_string() + "/" + filename;
 
         let _ = fs::create_dir_all(DIR_NAME);
 
-        if File::open(&file_name).is_ok() {
-            fs::remove_file(&file_name).unwrap();
+        if File::open(&filename).is_ok() {
+            fs::remove_file(&filename).unwrap();
         }
 
         OpenOptions::new()
             .read(true)
             .append(true)
             .create(true)
-            .open(&file_name)
+            .open(&filename)
             .unwrap()
     }
 
-    fn open(file_name: &str) -> File {
-        let file_name = DIR_NAME.to_string() + "/" + file_name;
+    fn open(filename: &str) -> File {
+        let filename = DIR_NAME.to_string() + "/" + filename;
 
         OpenOptions::new()
             .read(true)
             .append(true)
             .create(true)
-            .open(file_name)
+            .open(filename)
             .unwrap()
     }
 
-    fn clean(file_name: &str) {
-        let file_name = DIR_NAME.to_string() + "/" + file_name;
-        fs::remove_file(file_name).unwrap();
+    fn clean(filename: &str) {
+        let filename = DIR_NAME.to_string() + "/" + filename;
+        fs::remove_file(filename).unwrap();
         if fs::remove_dir(DIR_NAME).is_err() {
             // ignore removing directory, as other tests are
             // still running

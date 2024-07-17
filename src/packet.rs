@@ -1,6 +1,4 @@
 use crate::Convert;
-#[cfg(feature = "client")]
-use std::time::Duration;
 use std::{error::Error, fmt, str::FromStr};
 
 /// Packet `enum` represents the valid TFTP packet types.
@@ -203,18 +201,6 @@ pub enum OptionType {
     Windowsize,
 }
 
-#[cfg(feature = "client")]
-/// Default Timeout
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-
-#[cfg(feature = "client")]
-/// Default Blocksize
-pub const DEFAULT_BLOCKSIZE: usize = 512;
-
-#[cfg(feature = "client")]
-/// Default Windowsize
-pub const DEFAULT_WINDOWSIZE: u16 = 1;
-
 impl OptionType {
     /// Converts an [`OptionType`] to a [`str`].
     pub fn as_str(&self) -> &'static str {
@@ -394,10 +380,10 @@ fn parse_error(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
     }
 }
 
-fn serialize_rrq(file: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
+fn serialize_rrq(filename: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
     let mut buf = [
         &Opcode::Rrq.as_bytes(),
-        file.as_bytes(),
+        filename.as_bytes(),
         &[0x00],
         mode.as_bytes(),
         &[0x00],
@@ -410,10 +396,10 @@ fn serialize_rrq(file: &String, mode: &String, options: &Vec<TransferOption>) ->
     buf
 }
 
-fn serialize_wrq(file: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
+fn serialize_wrq(filename: &String, mode: &String, options: &Vec<TransferOption>) -> Vec<u8> {
     let mut buf = [
         &Opcode::Wrq.as_bytes(),
-        file.as_bytes(),
+        filename.as_bytes(),
         &[0x00],
         mode.as_bytes(),
         &[0x00],
@@ -735,14 +721,12 @@ mod tests {
 
     #[test]
     fn serializes_rrq() {
-        let serialized_data = vec![0x00, 0x01, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00];
+        let serialized_data = vec![
+            0x00, 0x01, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00,
+        ];
 
         assert_eq!(
-            serialize_rrq(
-                &"test".into(),
-                &"octet".into(),
-                &vec![]
-            ),
+            serialize_rrq(&"test".into(), &"octet".into(), &vec![]),
             serialized_data
         )
     }
@@ -781,14 +765,12 @@ mod tests {
 
     #[test]
     fn serializes_wrq() {
-        let serialized_data = vec![0x00, 0x02, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00];
+        let serialized_data = vec![
+            0x00, 0x02, 0x74, 0x65, 0x73, 0x74, 0x00, 0x6f, 0x63, 0x74, 0x65, 0x74, 0x00,
+        ];
 
         assert_eq!(
-            serialize_wrq(
-                &"test".into(),
-                &"octet".into(),
-                &vec![]
-            ),
+            serialize_wrq(&"test".into(), &"octet".into(), &vec![]),
             serialized_data
         )
     }

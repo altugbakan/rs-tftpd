@@ -22,13 +22,13 @@ fn client<T: Iterator<Item = String>>(args: T) -> Result<(), Box<dyn Error>> {
     if config.mode == Mode::Upload {
         println!(
             "Starting TFTP Client, uploading {} to {}",
-            config.filename.display(),
+            config.file_path.display(),
             SocketAddr::new(config.remote_ip_address, config.port),
         );
     } else {
         println!(
             "Starting TFTP Client, downloading {} from {}",
-            config.filename.display(),
+            config.file_path.display(),
             SocketAddr::new(config.remote_ip_address, config.port),
         );
     }

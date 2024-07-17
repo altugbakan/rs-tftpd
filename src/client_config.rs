@@ -1,5 +1,5 @@
 use crate::client::Mode;
-use crate::packet::{DEFAULT_BLOCKSIZE, DEFAULT_TIMEOUT, DEFAULT_WINDOWSIZE};
+use crate::server::convert_file_path;
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -38,10 +38,14 @@ pub struct ClientConfig {
     /// Download directory of the TFTP Client. (default: current working directory)
     pub receive_directory: PathBuf,
     /// File to Upload or Download.
-    pub filename: PathBuf,
+    pub file_path: PathBuf,
     /// Should clean (delete) files after receiving errors. (default: true)
-    pub clean_on_error: bool
+    pub clean_on_error: bool,
 }
+
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+pub const DEFAULT_BLOCKSIZE: usize = 512;
+pub const DEFAULT_WINDOWSIZE: u16 = 1;
 
 impl Default for ClientConfig {
     fn default() -> Self {
@@ -53,8 +57,8 @@ impl Default for ClientConfig {
             timeout: DEFAULT_TIMEOUT,
             mode: Mode::Download,
             receive_directory: Default::default(),
-            filename: Default::default(),
-            clean_on_error: true
+            file_path: Default::default(),
+            clean_on_error: true,
         }
     }
 }
@@ -140,8 +144,8 @@ impl ClientConfig {
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
-                file_name => {
-                    config.filename = PathBuf::from(file_name);
+                filename => {
+                    config.file_path = convert_file_path(filename);
                 }
             }
         }
@@ -152,8 +156,6 @@ impl ClientConfig {
 
 #[cfg(test)]
 mod tests {
-    use ClientConfig;
-
     use super::*;
 
     #[test]
@@ -176,7 +178,7 @@ mod tests {
                 "2",
                 "-t",
                 "4",
-                "--keep-on-error"
+                "--keep-on-error",
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -186,12 +188,12 @@ mod tests {
         assert_eq!(config.remote_ip_address, Ipv4Addr::new(0, 0, 0, 0));
         assert_eq!(config.port, 1234);
         assert_eq!(config.receive_directory, PathBuf::from("/"));
-        assert_eq!(config.filename, PathBuf::from("test.file"));
+        assert_eq!(config.file_path, PathBuf::from("test.file"));
         assert_eq!(config.windowsize, 2);
         assert_eq!(config.blocksize, 1024);
         assert_eq!(config.mode, Mode::Upload);
         assert_eq!(config.timeout, Duration::from_secs(4));
-        assert_eq!(config.clean_on_error, false);
+        assert!(!config.clean_on_error);
     }
 
     #[test]
@@ -204,8 +206,34 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.port, 2000);
-        assert_eq!(config.filename, PathBuf::from("test.file"));
+        assert_eq!(config.file_path, PathBuf::from("test.file"));
         assert_eq!(config.blocksize, 2048);
         assert_eq!(config.mode, Mode::Download);
+    }
+
+    #[test]
+    fn parses_file_paths() {
+        let config =
+            ClientConfig::new(["client", "test/test.file"].iter().map(|s| s.to_string())).unwrap();
+
+        let mut path = PathBuf::new();
+        path.push("test");
+        path.push("test.file");
+
+        assert_eq!(config.file_path, path);
+
+        let config = ClientConfig::new(
+            ["client", "test\\test\\test.file"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .unwrap();
+
+        let mut path = PathBuf::new();
+        path.push("test");
+        path.push("test");
+        path.push("test.file");
+
+        assert_eq!(config.file_path, path);
     }
 }

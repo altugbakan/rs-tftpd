@@ -1,4 +1,4 @@
-use crate::packet::{DEFAULT_BLOCKSIZE, DEFAULT_TIMEOUT, DEFAULT_WINDOWSIZE};
+use crate::client_config::{DEFAULT_BLOCKSIZE, DEFAULT_TIMEOUT, DEFAULT_WINDOWSIZE};
 use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, Worker};
 use std::cmp::PartialEq;
 use std::error::Error;
@@ -28,9 +28,9 @@ pub struct Client {
     windowsize: u16,
     timeout: Duration,
     mode: Mode,
-    filename: PathBuf,
-    save_path: PathBuf,
-    clean_on_error: bool
+    file_path: PathBuf,
+    receive_directory: PathBuf,
+    clean_on_error: bool,
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -51,9 +51,9 @@ impl Client {
             windowsize: config.windowsize,
             timeout: config.timeout,
             mode: config.mode,
-            filename: config.filename.clone(),
-            save_path: config.receive_directory.clone(),
-            clean_on_error: config.clean_on_error
+            file_path: config.file_path.clone(),
+            receive_directory: config.receive_directory.clone(),
+            clean_on_error: config.clean_on_error,
         })
     }
 
@@ -76,19 +76,19 @@ impl Client {
             UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
         };
 
-        let file_name = self
-            .filename
+        let filename = self
+            .file_path
             .file_name()
             .ok_or("Invalid filename")?
             .to_str()
             .ok_or("Filename is not valid UTF-8")?
             .to_owned();
-        let size = File::open(self.filename.clone())?.metadata()?.len() as usize;
+        let size = File::open(self.file_path.clone())?.metadata()?.len() as usize;
 
         Socket::send_to(
             &socket,
             &Packet::Wrq {
-                filename: file_name,
+                filename,
                 mode: "octet".into(),
                 options: vec![
                     TransferOption {
@@ -159,12 +159,16 @@ impl Client {
         } else {
             UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
         };
-        let file = self.filename.clone();
 
         Socket::send_to(
             &socket,
             &Packet::Rrq {
-                filename: file.into_os_string().into_string().unwrap(),
+                filename: self
+                    .file_path
+                    .clone()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap_or_else(|_| "Invalid filename".to_string()),
                 mode: "octet".into(),
                 options: vec![
                     TransferOption {
@@ -237,8 +241,13 @@ impl Client {
         socket.set_write_timeout(self.timeout)?;
 
         let worker = if self.mode == Mode::Download {
-            let mut file = self.save_path.clone();
-            file = file.join(self.filename.clone());
+            let mut file = self.receive_directory.clone();
+            file = file.join(
+                self.file_path
+                    .clone()
+                    .file_name()
+                    .ok_or("Invalid filename")?,
+            );
             Worker::new(
                 socket,
                 file,
@@ -251,7 +260,7 @@ impl Client {
         } else {
             Worker::new(
                 socket,
-                PathBuf::from(self.filename.clone()),
+                self.file_path.clone(),
                 self.clean_on_error,
                 self.blocksize,
                 DEFAULT_TIMEOUT,

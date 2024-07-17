@@ -4,7 +4,7 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
@@ -103,7 +103,7 @@ impl Server {
                             continue;
                         }
                         println!("Receiving {filename} from {from}");
-                        if let Err(err) = self.handle_wrq(filename.clone(), &mut options, &from) {
+                        if let Err(err) = self.handle_wrq(filename, &mut options, &from) {
                             eprintln!("Error while receiving file: {err}")
                         }
                     }
@@ -135,7 +135,8 @@ impl Server {
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.send_directory.join(filename);
+        let file_path = convert_file_path(&filename);
+        let file_path = &self.send_directory.join(file_path);
         match check_file_exists(file_path, &self.send_directory) {
             ErrorCode::FileNotFound => Socket::send_to(
                 &self.socket,
@@ -196,11 +197,12 @@ impl Server {
 
     fn handle_wrq(
         &mut self,
-        file_name: String,
+        filename: String,
         options: &mut [TransferOption],
         to: &SocketAddr,
     ) -> Result<(), Box<dyn Error>> {
-        let file_path = &self.receive_directory.join(file_name);
+        let file_path = convert_file_path(&filename);
+        let file_path = &self.receive_directory.join(file_path);
         let initialize_write = &mut || -> Result<(), Box<dyn Error>> {
             let worker_options = parse_options(options, RequestType::Write)?;
             let mut socket: Box<dyn Socket>;
@@ -283,6 +285,16 @@ struct WorkerOptions {
 enum RequestType {
     Read(u64),
     Write,
+}
+
+pub fn convert_file_path(filename: &str) -> PathBuf {
+    let normalized_filename = if MAIN_SEPARATOR == '\\' {
+        filename.replace('/', "\\")
+    } else {
+        filename.replace('\\', "/")
+    };
+
+    PathBuf::from(normalized_filename)
 }
 
 fn parse_options(
@@ -381,6 +393,27 @@ fn validate_file_path(file: &Path, directory: &PathBuf) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn converts_file_path() {
+        let path = convert_file_path("test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path("test\\test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test");
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path("test/test/test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test");
+        correct_path.push("test");
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+    }
 
     #[test]
     fn validates_file_path() {

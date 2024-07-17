@@ -43,7 +43,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 /// ```
 pub struct Worker<T: Socket + ?Sized> {
     socket: Box<T>,
-    file_name: PathBuf,
+    file_path: PathBuf,
     clean_on_error: bool,
     blk_size: usize,
     timeout: Duration,
@@ -55,7 +55,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     /// Creates a new [`Worker`] with the supplied options.
     pub fn new(
         socket: Box<T>,
-        file_name: PathBuf,
+        file_path: PathBuf,
         clean_on_error: bool,
         blk_size: usize,
         timeout: Duration,
@@ -64,7 +64,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     ) -> Worker<T> {
         Worker {
             socket,
-            file_name,
+            file_path,
             clean_on_error,
             blk_size,
             timeout,
@@ -76,12 +76,12 @@ impl<T: Socket + ?Sized> Worker<T> {
     /// Sends a file to the remote [`SocketAddr`] that has sent a read request using
     /// a random port, asynchronously.
     pub fn send(self, check_response: bool) -> Result<JoinHandle<()>, Box<dyn Error>> {
-        let file_name = self.file_name.clone();
+        let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
         let handle = thread::spawn(move || {
             let handle_send = || -> Result<(), Box<dyn Error>> {
-                self.send_file(File::open(&file_name)?, check_response)?;
+                self.send_file(File::open(&file_path)?, check_response)?;
 
                 Ok(())
             };
@@ -90,7 +90,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                 Ok(_) => {
                     println!(
                         "Sent {} to {}",
-                        &file_name.file_name().unwrap().to_string_lossy(),
+                        &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
                     );
                 }
@@ -107,12 +107,12 @@ impl<T: Socket + ?Sized> Worker<T> {
     /// the supplied socket, asynchronously.
     pub fn receive(self) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let clean_on_error = self.clean_on_error;
-        let file_name = self.file_name.clone();
+        let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
         let handle = thread::spawn(move || {
             let handle_receive = || -> Result<(), Box<dyn Error>> {
-                self.receive_file(File::create(&file_name)?)?;
+                self.receive_file(File::create(&file_path)?)?;
 
                 Ok(())
             };
@@ -121,16 +121,14 @@ impl<T: Socket + ?Sized> Worker<T> {
                 Ok(_) => {
                     println!(
                         "Received {} from {}",
-                        &file_name.file_name().unwrap().to_string_lossy(),
+                        &file_path.file_name().unwrap().to_string_lossy(),
                         remote_addr
                     );
                 }
                 Err(err) => {
                     eprintln!("{err}");
-                    if clean_on_error {
-                        if fs::remove_file(&file_name).is_err() {
-                            eprintln!("Error while cleaning {}", &file_name.to_str().unwrap());
-                        }
+                    if clean_on_error && fs::remove_file(&file_path).is_err() {
+                        eprintln!("Error while cleaning {}", &file_path.to_str().unwrap());
                     }
                 }
             }
