@@ -119,7 +119,7 @@ impl ClientConfig {
                 "-d" | "--download" => {
                     config.mode = Mode::Download;
                 }
-                "--dont-clean" => {
+                "--keep-on-error" => {
                     config.clean_on_error = false;
                 }
                 "-h" | "--help" => {
@@ -136,7 +136,7 @@ impl ClientConfig {
                     println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
                     println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
                     println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
-                    println!("  --dont-clean\t\t\t\tPrevent client from deleting files after receiving errors");
+                    println!("  --keep-on-error\t\t\t\tPrevent client from deleting files after receiving errors");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
