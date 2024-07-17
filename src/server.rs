@@ -34,6 +34,7 @@ pub struct Server {
     single_port: bool,
     read_only: bool,
     overwrite: bool,
+    clean_on_error: bool,
     duplicate_packets: u8,
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
@@ -50,6 +51,7 @@ impl Server {
             single_port: config.single_port,
             read_only: config.read_only,
             overwrite: config.overwrite,
+            clean_on_error: config.clean_on_error,
             duplicate_packets: config.duplicate_packets,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
@@ -179,6 +181,7 @@ impl Server {
                 let worker = Worker::new(
                     socket,
                     file_path.clone(),
+                    self.clean_on_error,
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
@@ -220,6 +223,7 @@ impl Server {
             let worker = Worker::new(
                 socket,
                 file_path.clone(),
+                self.clean_on_error,
                 worker_options.block_size,
                 worker_options.timeout,
                 worker_options.window_size,

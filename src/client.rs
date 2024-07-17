@@ -30,6 +30,7 @@ pub struct Client {
     mode: Mode,
     filename: PathBuf,
     save_path: PathBuf,
+    clean_on_error: bool
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -52,6 +53,7 @@ impl Client {
             mode: config.mode,
             filename: config.filename.clone(),
             save_path: config.receive_directory.clone(),
+            clean_on_error: config.clean_on_error
         })
     }
 
@@ -240,6 +242,7 @@ impl Client {
             Worker::new(
                 socket,
                 file,
+                self.clean_on_error,
                 self.blocksize,
                 DEFAULT_TIMEOUT,
                 self.windowsize,
@@ -249,6 +252,7 @@ impl Client {
             Worker::new(
                 socket,
                 PathBuf::from(self.filename.clone()),
+                self.clean_on_error,
                 self.blocksize,
                 DEFAULT_TIMEOUT,
                 self.windowsize,

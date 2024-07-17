@@ -32,6 +32,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 /// let worker = Worker::new(
 ///     Box::new(socket),
 ///     PathBuf::from_str("Cargo.toml").unwrap(),
+///     true,
 ///     512,
 ///     Duration::from_secs(1),
 ///     1,
@@ -43,6 +44,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 pub struct Worker<T: Socket + ?Sized> {
     socket: Box<T>,
     file_name: PathBuf,
+    clean_on_error: bool,
     blk_size: usize,
     timeout: Duration,
     windowsize: u16,
@@ -54,6 +56,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     pub fn new(
         socket: Box<T>,
         file_name: PathBuf,
+        clean_on_error: bool,
         blk_size: usize,
         timeout: Duration,
         windowsize: u16,
@@ -62,6 +65,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         Worker {
             socket,
             file_name,
+            clean_on_error,
             blk_size,
             timeout,
             windowsize,
@@ -102,6 +106,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     /// Receives a file from the remote [`SocketAddr`] that has sent a write request using
     /// the supplied socket, asynchronously.
     pub fn receive(self) -> Result<JoinHandle<()>, Box<dyn Error>> {
+        let clean_on_error = self.clean_on_error;
         let file_name = self.file_name.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
@@ -122,8 +127,10 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
                 Err(err) => {
                     eprintln!("{err}");
-                    if fs::remove_file(&file_name).is_err() {
-                        eprintln!("Error while cleaning {}", &file_name.to_str().unwrap());
+                    if clean_on_error {
+                        if fs::remove_file(&file_name).is_err() {
+                            eprintln!("Error while cleaning {}", &file_name.to_str().unwrap());
+                        }
                     }
                 }
             }

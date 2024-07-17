@@ -37,6 +37,8 @@ pub struct Config {
     pub duplicate_packets: u8,
     /// Overwrite existing files. (default: false)
     pub overwrite: bool,
+    /// Should clean (delete) files after receiving errors. (default: true)
+    pub clean_on_error: bool
 }
 
 impl Default for Config {
@@ -51,6 +53,7 @@ impl Default for Config {
             read_only: Default::default(),
             duplicate_packets: Default::default(),
             overwrite: Default::default(),
+            clean_on_error: true
         }
     }
 }
@@ -131,6 +134,7 @@ impl Config {
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
+                    println!("  --dont-clean\t\t\t\tWill prevent daemon from deleting files after receiving errors.");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -152,6 +156,9 @@ impl Config {
                 }
                 "--overwrite" => {
                     config.overwrite = true;
+                }
+                "--dont-clean" => {
+                    config.clean_on_error = false;
                 }
 
                 invalid => return Err(format!("Invalid flag: {invalid}").into()),
@@ -179,7 +186,7 @@ mod tests {
     fn parses_full_config() {
         let config = Config::new(
             [
-                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r",
+                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r", "--dont-clean"
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -191,6 +198,7 @@ mod tests {
         assert_eq!(config.directory, PathBuf::from("/"));
         assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.send_directory, PathBuf::from("/"));
+        assert_eq!(config.clean_on_error, false);
         assert!(config.single_port);
         assert!(config.read_only);
     }

@@ -39,6 +39,8 @@ pub struct ClientConfig {
     pub receive_directory: PathBuf,
     /// File to Upload or Download.
     pub filename: PathBuf,
+    /// Should clean (delete) files after receiving errors. (default: true)
+    pub clean_on_error: bool
 }
 
 impl Default for ClientConfig {
@@ -52,6 +54,7 @@ impl Default for ClientConfig {
             mode: Mode::Download,
             receive_directory: Default::default(),
             filename: Default::default(),
+            clean_on_error: true
         }
     }
 }
@@ -116,6 +119,9 @@ impl ClientConfig {
                 "-d" | "--download" => {
                     config.mode = Mode::Download;
                 }
+                "--dont-clean" => {
+                    config.clean_on_error = false;
+                }
                 "-h" | "--help" => {
                     println!("TFTP Client\n");
                     println!("Usage: tftpd client <File> [OPTIONS]\n");
@@ -130,6 +136,7 @@ impl ClientConfig {
                     println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
                     println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
                     println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
+                    println!("  --dont-clean\t\t\t\tWill prevent client from deleting files after receiving errors.");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -169,6 +176,7 @@ mod tests {
                 "2",
                 "-t",
                 "4",
+                "--dont-clean"
             ]
             .iter()
             .map(|s| s.to_string()),
@@ -183,6 +191,7 @@ mod tests {
         assert_eq!(config.blocksize, 1024);
         assert_eq!(config.mode, Mode::Upload);
         assert_eq!(config.timeout, Duration::from_secs(4));
+        assert_eq!(config.clean_on_error, false);
     }
 
     #[test]
