@@ -186,7 +186,7 @@ mod tests {
     fn parses_full_config() {
         let config = Config::new(
             [
-                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r", "--dont-clean"
+                "/", "-i", "0.0.0.0", "-p", "1234", "-d", "/", "-rd", "/", "-sd", "/", "-s", "-r", "--keep-on-error"
             ]
             .iter()
             .map(|s| s.to_string()),

@@ -176,7 +176,7 @@ mod tests {
                 "2",
                 "-t",
                 "4",
-                "--dont-clean"
+                "--keep-on-error"
             ]
             .iter()
             .map(|s| s.to_string()),
