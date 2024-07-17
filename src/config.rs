@@ -134,7 +134,7 @@ impl Config {
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
-                    println!("  --dont-clean\t\t\t\tPrevent daemon from deleting files after receiving errors");
+                    println!("  --keep-on-error\t\t\t\tPrevent daemon from deleting files after receiving errors");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -157,7 +157,7 @@ impl Config {
                 "--overwrite" => {
                     config.overwrite = true;
                 }
-                "--dont-clean" => {
+                "--keep-on-error" => {
                     config.clean_on_error = false;
                 }
 
