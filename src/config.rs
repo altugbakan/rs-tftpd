@@ -134,7 +134,7 @@ impl Config {
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
-                    println!("  --dont-clean\t\t\t\tWill prevent daemon from deleting files after receiving errors.");
+                    println!("  --dont-clean\t\t\t\tPrevent daemon from deleting files after receiving errors");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
