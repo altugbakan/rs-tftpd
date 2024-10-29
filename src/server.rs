@@ -288,10 +288,11 @@ enum RequestType {
 }
 
 pub fn convert_file_path(filename: &str) -> PathBuf {
+    let formatted_filename = filename.trim_start_matches(|c| c == '/' || c == '\\').to_string();
     let normalized_filename = if MAIN_SEPARATOR == '\\' {
-        filename.replace('/', "\\")
+        formatted_filename.replace('/', "\\")
     } else {
-        filename.replace('\\', "/")
+        formatted_filename.replace('\\', "/")
     };
 
     PathBuf::from(normalized_filename)
@@ -397,6 +398,16 @@ mod tests {
     #[test]
     fn converts_file_path() {
         let path = convert_file_path("test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path("\\test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+        
+        let path = convert_file_path("/test.file");
         let mut correct_path = PathBuf::new();
         correct_path.push("test.file");
         assert_eq!(path, correct_path);
