@@ -402,13 +402,23 @@ mod tests {
         correct_path.push("test.file");
         assert_eq!(path, correct_path);
 
-        let path = convert_file_path("\\test\\test.file");
+        let path = convert_file_path("\\test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+        
+        let path = convert_file_path("/test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path("test\\test.file");
         let mut correct_path = PathBuf::new();
         correct_path.push("test");
         correct_path.push("test.file");
         assert_eq!(path, correct_path);
 
-        let path = convert_file_path("/test/test/test.file");
+        let path = convert_file_path("test/test/test.file");
         let mut correct_path = PathBuf::new();
         correct_path.push("test");
         correct_path.push("test");
