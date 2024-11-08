@@ -138,22 +138,28 @@ impl Server {
         let file_path = convert_file_path(&filename);
         let file_path = &self.send_directory.join(file_path);
         match check_file_exists(file_path, &self.send_directory) {
-            ErrorCode::FileNotFound => Socket::send_to(
-                &self.socket,
-                &Packet::Error {
-                    code: ErrorCode::FileNotFound,
-                    msg: "file does not exist".to_string(),
-                },
-                to,
-            ),
-            ErrorCode::AccessViolation => Socket::send_to(
-                &self.socket,
-                &Packet::Error {
-                    code: ErrorCode::AccessViolation,
-                    msg: "file access violation".to_string(),
-                },
-                to,
-            ),
+            ErrorCode::FileNotFound => {
+                println!("File not found: {}", file_path.display());
+                Socket::send_to(
+                    &self.socket,
+                    &Packet::Error {
+                        code: ErrorCode::FileNotFound,
+                        msg: "file does not exist".to_string(),
+                    },
+                    to,
+                )
+            }
+            ErrorCode::AccessViolation => {
+                println!("Access violation detected for file {}", file_path.display());
+                Socket::send_to(
+                    &self.socket,
+                    &Packet::Error {
+                        code: ErrorCode::AccessViolation,
+                        msg: format!("file access violation: {}", file_path.display()),
+                    },
+                    to,
+                )
+            }
             ErrorCode::FileExists => {
                 let worker_options =
                     parse_options(options, RequestType::Read(file_path.metadata()?.len()))?;
@@ -240,6 +246,7 @@ impl Server {
                 if self.overwrite {
                     initialize_write()
                 } else {
+                    println!("File exists {}, cannot override.", file_path.display());
                     Socket::send_to(
                         &self.socket,
                         &Packet::Error {
@@ -250,14 +257,17 @@ impl Server {
                     )
                 }
             }
-            ErrorCode::AccessViolation => Socket::send_to(
-                &self.socket,
-                &Packet::Error {
-                    code: ErrorCode::AccessViolation,
-                    msg: "file access violation".to_string(),
-                },
-                to,
-            ),
+            ErrorCode::AccessViolation => {
+                println!("Access violation detected for file {}", file_path.display());
+                Socket::send_to(
+                    &self.socket,
+                    &Packet::Error {
+                        code: ErrorCode::AccessViolation,
+                        msg: format!("file access violation: {}", file_path.display()),
+                    },
+                    to,
+                )
+            }
             ErrorCode::FileNotFound => initialize_write(),
             _ => Err("Unexpected error code when checking file".into()),
         }
