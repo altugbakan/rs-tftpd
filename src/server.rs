@@ -246,7 +246,7 @@ impl Server {
                 if self.overwrite {
                     initialize_write()
                 } else {
-                    println!("File {} already exists.", file_path.display());
+                    println!("File {} already exists", file_path.display());
                     Socket::send_to(
                         &self.socket,
                         &Packet::Error {
