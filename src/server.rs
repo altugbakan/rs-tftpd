@@ -139,12 +139,12 @@ impl Server {
         let file_path = &self.send_directory.join(file_path);
         match check_file_exists(file_path, &self.send_directory) {
             ErrorCode::FileNotFound => {
-                println!("File not found: {}", file_path.display());
+                println!("File {} not found", file_path.display());
                 Socket::send_to(
                     &self.socket,
                     &Packet::Error {
                         code: ErrorCode::FileNotFound,
-                        msg: "file does not exist".to_string(),
+                        msg: format!("file {} does not exist", file_path.display()),
                     },
                     to,
                 )
@@ -246,7 +246,7 @@ impl Server {
                 if self.overwrite {
                     initialize_write()
                 } else {
-                    println!("File exists {}, cannot override.", file_path.display());
+                    println!("File {} already exists.", file_path.display());
                     Socket::send_to(
                         &self.socket,
                         &Packet::Error {
@@ -298,7 +298,9 @@ enum RequestType {
 }
 
 pub fn convert_file_path(filename: &str) -> PathBuf {
-    let formatted_filename = filename.trim_start_matches(|c| c == '/' || c == '\\').to_string();
+    let formatted_filename = filename
+        .trim_start_matches(|c| c == '/' || c == '\\')
+        .to_string();
     let normalized_filename = if MAIN_SEPARATOR == '\\' {
         formatted_filename.replace('/', "\\")
     } else {
@@ -416,7 +418,7 @@ mod tests {
         let mut correct_path = PathBuf::new();
         correct_path.push("test.file");
         assert_eq!(path, correct_path);
-        
+
         let path = convert_file_path("/test.file");
         let mut correct_path = PathBuf::new();
         correct_path.push("test.file");
