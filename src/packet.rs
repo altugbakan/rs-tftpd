@@ -58,7 +58,7 @@ pub enum Packet {
 impl Packet {
     /// Deserializes a [`u8`] slice into a [`Packet`].
     pub fn deserialize(buf: &[u8]) -> Result<Packet, Box<dyn Error>> {
-        if buff.len < 2 {
+        if buf.len < 2 {
             return Err("Buffer too short to serialize".into());
         }
         let opcode = Opcode::from_u16(Convert::to_u16(&buf[0..=1])?)?;
