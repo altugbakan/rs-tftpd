@@ -95,7 +95,11 @@ impl<T: Socket + ?Sized> Worker<T> {
                     );
                 }
                 Err(err) => {
-                    eprintln!("{err}");
+                    eprintln!(
+                        "Error {err}, while sending {} to {}",
+                        &file_path.file_name().unwrap().to_string_lossy(),
+                        &remote_addr
+                    );
                 }
             }
         });
@@ -126,7 +130,11 @@ impl<T: Socket + ?Sized> Worker<T> {
                     );
                 }
                 Err(err) => {
-                    eprintln!("{err}");
+                    eprintln!(
+                        "Error {err}, while receiving {} from {}",
+                        &file_path.file_name().unwrap().to_string_lossy(),
+                        remote_addr
+                    );
                     if clean_on_error && fs::remove_file(&file_path).is_err() {
                         eprintln!("Error while cleaning {}", &file_path.to_str().unwrap());
                     }
