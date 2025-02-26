@@ -102,7 +102,14 @@ impl ClientConfig {
                 }
                 "-t" | "--timeout" => {
                     if let Some(timeout_str) = args.next() {
-                        config.timeout = Duration::from_secs(timeout_str.parse::<u64>()?);
+                        if timeout_str.contains('.') {
+                            config.timeout = Duration::from_secs_f32(timeout_str.parse::<f32>()?);
+                            if config.timeout < Duration::from_secs_f32(0.001) {
+                                return Err("timeout cannot be shorter than 1 ms".into());
+                            }                           
+                        } else {
+                            config.timeout = Duration::from_secs(timeout_str.parse::<u64>()?);
+                        }
                     } else {
                         return Err("Missing timeout after flag".into());
                     }
@@ -134,13 +141,11 @@ impl ClientConfig {
                     println!("  -p, --port <PORT>\t\t\tPort of the server (default: 69)");
                     println!("  -b, --blocksize <number>\t\tSets the blocksize (default: 512)");
                     println!("  -w, --windowsize <number>\t\tSets the windowsize (default: 1)");
-                    println!(
-                        "  -t, --timeout <seconds>\t\tSets the timeout in seconds (default: 5)"
-                    );
+                    println!("  -t, --timeout <seconds>\t\tSets the timeout in seconds (default: 5)");
                     println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
                     println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
                     println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
-                    println!("  --keep-on-error\t\t\t\tPrevent client from deleting files after receiving errors");
+                    println!("  --keep-on-error\t\t\tPrevent client from deleting files after receiving errors");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
@@ -149,6 +154,10 @@ impl ClientConfig {
                 }
             }
         }
+
+                if config.file_path.as_os_str().is_empty() {
+                    return Err("missing filename".into());
+                }
 
         Ok(config)
     }

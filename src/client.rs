@@ -2,7 +2,7 @@ use crate::client_config::{DEFAULT_BLOCKSIZE, DEFAULT_TIMEOUT, DEFAULT_WINDOWSIZ
 use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, Worker};
 use std::cmp::PartialEq;
 use std::error::Error;
-use std::fs::File;
+use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -59,22 +59,54 @@ impl Client {
 
     /// Run the Client depending on the [`Mode`] the client is in
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        match self.mode {
-            Mode::Upload => self.upload(),
-            Mode::Download => self.download(),
-        }
-    }
-
-    fn upload(&mut self) -> Result<(), Box<dyn Error>> {
-        if self.mode != Mode::Upload {
-            return Err(Box::from("Client mode is set to Download"));
-        }
 
         let socket = if self.remote_address.is_ipv4() {
             UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?
         } else {
             UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
         };
+
+        match self.mode {
+            Mode::Upload => self.upload(socket),
+            Mode::Download => self.download(socket),
+        }
+    }
+
+    fn prepare_options(&self, size : usize) -> Vec<TransferOption> {
+        let mut options = vec![
+            TransferOption {
+                option: OptionType::BlockSize,
+                value: self.blocksize,
+            },
+            TransferOption {
+                option: OptionType::Windowsize,
+                value: self.windowsize as usize,
+            },
+            TransferOption {
+                option: OptionType::TransferSize,
+                value: size,
+            },
+        ];
+
+        options.push(if self.timeout.subsec_millis() == 0 {
+            TransferOption {
+                option: OptionType::Timeout,
+                value: self.timeout.as_secs() as usize,
+            }
+        } else {
+            TransferOption {
+                option: OptionType::TimeoutMs,
+                value: self.timeout.as_millis() as usize,
+            }           
+        });
+
+        options
+    }
+
+    fn upload(&mut self, socket : UdpSocket) -> Result<(), Box<dyn Error>> {
+        if self.mode != Mode::Upload {
+            return Err(Box::from("Client mode is set to Download"));
+        }
 
         let filename = self
             .file_path
@@ -83,143 +115,100 @@ impl Client {
             .to_str()
             .ok_or("Filename is not valid UTF-8")?
             .to_owned();
-        let size = File::open(self.file_path.clone())?.metadata()?.len() as usize;
+
+        let size = fs::metadata(self.file_path.clone())?.len() as usize;
 
         Socket::send_to(
             &socket,
             &Packet::Wrq {
                 filename,
                 mode: "octet".into(),
-                options: vec![
-                    TransferOption {
-                        option: OptionType::BlockSize,
-                        value: self.blocksize,
-                    },
-                    TransferOption {
-                        option: OptionType::Windowsize,
-                        value: self.windowsize as usize,
-                    },
-                    TransferOption {
-                        option: OptionType::Timeout,
-                        value: self.timeout.as_secs() as usize,
-                    },
-                    TransferOption {
-                        option: OptionType::TransferSize,
-                        value: size,
-                    },
-                ],
+                options : self.prepare_options(size),
             },
             &self.remote_address,
         )?;
 
-        let received = Socket::recv_from(&socket);
+        match Socket::recv_from(&socket) {
+            Ok((packet, from)) => {
+                socket.connect(from)?;
+                match packet {
+                    Packet::Oack(options) => {
+                        self.verify_oack(&options)?;
+                        let worker = self.configure_worker(socket)?;
+                        let join_handle = worker.send(false)?;
+                        let _ = join_handle.join();
 
-        if let Ok((packet, from)) = received {
-            socket.connect(from)?;
-            match packet {
-                Packet::Oack(options) => {
-                    self.verify_oack(&options)?;
-                    let worker = self.configure_worker(socket)?;
-                    let join_handle = worker.send(false)?;
-                    let _ = join_handle.join();
-                }
-                Packet::Ack(_) => {
-                    self.blocksize = DEFAULT_BLOCKSIZE;
-                    self.windowsize = DEFAULT_WINDOWSIZE;
-                    self.timeout = DEFAULT_TIMEOUT;
-                    let worker = self.configure_worker(socket)?;
-                    let join_handle = worker.send(false)?;
-                    let _ = join_handle.join();
-                }
-                Packet::Error { code, msg } => {
-                    return Err(Box::from(format!(
-                        "Client received error from server: {code}: {msg}"
-                    )));
-                }
-                _ => {
-                    return Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"
-                    )));
+                        Ok(())
+                    }
+
+                    Packet::Ack(_) => {
+                        self.blocksize = DEFAULT_BLOCKSIZE;
+                        self.windowsize = DEFAULT_WINDOWSIZE;
+                        self.timeout = DEFAULT_TIMEOUT;
+                        let worker = self.configure_worker(socket)?;
+                        let join_handle = worker.send(false)?;
+                        let _ = join_handle.join();
+
+                        Ok(())
+                    }
+
+                    Packet::Error { code, msg } => Err(Box::from(format!(
+                        "Client received error from server: {code}: {msg}"))),
+
+                    _ => Err(Box::from(format!(
+                        "Client received unexpected packet from server: {packet:#?}"))), 
                 }
             }
-        } else {
-            return Err(Box::from("Unexpected Error"));
+            Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
         }
-
-        Ok(())
     }
 
-    fn download(&mut self) -> Result<(), Box<dyn Error>> {
+    fn download(&mut self, socket : UdpSocket) -> Result<(), Box<dyn Error>> {
         if self.mode != Mode::Download {
             return Err(Box::from("Client mode is set to Upload"));
         }
-
-        let socket = if self.remote_address.is_ipv4() {
-            UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?
-        } else {
-            UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
-        };
+        
+        let filename = self
+            .file_path
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap_or_else(|_| "Invalid filename".to_string());
 
         Socket::send_to(
             &socket,
             &Packet::Rrq {
-                filename: self
-                    .file_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap_or_else(|_| "Invalid filename".to_string()),
+                filename,
                 mode: "octet".into(),
-                options: vec![
-                    TransferOption {
-                        option: OptionType::BlockSize,
-                        value: self.blocksize,
-                    },
-                    TransferOption {
-                        option: OptionType::Windowsize,
-                        value: self.windowsize as usize,
-                    },
-                    TransferOption {
-                        option: OptionType::Timeout,
-                        value: self.timeout.as_secs() as usize,
-                    },
-                    TransferOption {
-                        option: OptionType::TransferSize,
-                        value: 0,
-                    },
-                ],
+                options : self.prepare_options(0),
             },
             &self.remote_address,
         )?;
 
-        let received = Socket::recv_from(&socket);
+        match Socket::recv_from(&socket) {
 
-        if let Ok((packet, from)) = received {
-            socket.connect(from)?;
-            match packet {
-                Packet::Oack(options) => {
-                    self.verify_oack(&options)?;
-                    Socket::send_to(&socket, &Packet::Ack(0), &from)?;
-                    let worker = self.configure_worker(socket)?;
-                    let join_handle = worker.receive()?;
-                    let _ = join_handle.join();
-                }
-                Packet::Error { code, msg } => {
-                    return Err(Box::from(format!(
-                        "Client received error from server: {code}: {msg}"
-                    )));
-                }
-                _ => {
-                    return Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"
-                    )));
-                }
+            Ok((packet, from)) => {
+                socket.connect(from)?;
+                match packet {
+                    Packet::Oack(options) => {
+                        self.verify_oack(&options)?;
+                        Socket::send_to(&socket, &Packet::Ack(0), &from)?;
+                        let worker = self.configure_worker(socket)?;
+                        let join_handle = worker.receive()?;
+                        let _ = join_handle.join();
+
+                        Ok(())
+                    }
+                    
+                    Packet::Error { code, msg } => Err(Box::from(format!(
+                        "Client received error from server: {code}: {msg}"))),
+
+                    _ => Err(Box::from(format!(
+                        "Client received unexpected packet from server: {packet:#?}"))),
+                }               
             }
-        } else {
-            return Err(Box::from("Unexpected Error"));
+            Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
         }
-
-        Ok(())
     }
 
     fn verify_oack(&mut self, options: &Vec<TransferOption>) -> Result<(), Box<dyn Error>> {
