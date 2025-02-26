@@ -200,6 +200,8 @@ pub enum OptionType {
     TransferSize,
     /// Timeout option type
     Timeout,
+    /// Timeout in ms option type
+    TimeoutMs,
     /// Windowsize option type
     Windowsize,
 }
@@ -211,6 +213,7 @@ impl OptionType {
             OptionType::BlockSize => "blksize",
             OptionType::TransferSize => "tsize",
             OptionType::Timeout => "timeout",
+            OptionType::TimeoutMs => "timeoutms",
             OptionType::Windowsize => "windowsize",
         }
     }
@@ -225,6 +228,7 @@ impl FromStr for OptionType {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
+            "timeoutms" => Ok(OptionType::TimeoutMs),
             "windowsize" => Ok(OptionType::Windowsize),
             _ => Err("Invalid option type"),
         }
