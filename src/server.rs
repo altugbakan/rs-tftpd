@@ -342,6 +342,9 @@ fn parse_options(
                 }
                 worker_options.timeout = Duration::from_secs(*value as u64);
             }
+            OptionType::TimeoutMs => {
+                worker_options.timeout = Duration::from_millis(*value as u64);
+            }
             OptionType::Windowsize => {
                 if *value == 0 || *value > u16::MAX as usize {
                     return Err("Invalid windowsize value");
@@ -389,10 +392,12 @@ fn accept_request<T: Socket>(
 
 fn check_file_exists(file: &Path, directory: &PathBuf) -> ErrorCode {
     if !validate_file_path(file, directory) {
+        eprintln!("Cannot access {} in {}", file.display(), directory.display());
         return ErrorCode::AccessViolation;
     }
 
     if !file.exists() {
+        eprintln!("Cannot find {} in {}", file.display(), directory.display());
         return ErrorCode::FileNotFound;
     }
 

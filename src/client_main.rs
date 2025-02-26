@@ -9,7 +9,8 @@ fn main() {
 }
 
 fn client<T: Iterator<Item = String>>(args: T) -> Result<(), Box<dyn Error>> {
-    let config = ClientConfig::new(args).unwrap_or_else(|err| {
+    // Parse arguments, skipping first one (exec name)
+    let config = ClientConfig::new(args.skip(1)).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");
         process::exit(1)
     });
