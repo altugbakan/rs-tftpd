@@ -8,7 +8,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const MAX_RETRIES: u32 = 6;
 const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
@@ -49,6 +48,7 @@ pub struct Worker<T: Socket + ?Sized> {
     timeout: Duration,
     windowsize: u16,
     repeat_amount: u8,
+    max_retries: usize,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -61,6 +61,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         timeout: Duration,
         windowsize: u16,
         repeat_amount: u8,
+        max_retries : usize,
     ) -> Worker<T> {
         Worker {
             socket,
@@ -70,6 +71,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             timeout,
             windowsize,
             repeat_amount,
+            max_retries,
         }
     }
 
@@ -161,6 +163,10 @@ impl<T: Socket + ?Sized> Worker<T> {
                 if time.elapsed() >= self.timeout {
                     self.send_window(&window, block_number)?;
                     time = Instant::now();
+                    if retry_cnt == self.max_retries {
+                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
+                    }
+                    retry_cnt += 1;
                 }
 
                 match self.socket.recv() {
@@ -175,12 +181,21 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Ok(Packet::Error { code, msg }) => {
                         return Err(format!("Received error code {code}: {msg}").into());
                     }
-                    _ => {
-                        retry_cnt += 1;
-                        if retry_cnt == MAX_RETRIES {
-                            return Err(
-                                format!("Transfer timed out after {MAX_RETRIES} tries").into()
-                            );
+
+                    Ok(_) => {
+                        println!("Received unexpected packet");
+                    }
+
+                    Err(e) => {
+                        if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
+                            if io_e.kind() == std::io::ErrorKind::ConnectionReset {
+                                println!("Cnx reset during reception {io_e:?}");
+                                // We may want to return error here to abort retries
+                            } else {
+                                println!("IO error during reception {io_e:?}");
+                            }
+                        } else {
+                            println!("Unkown error during reception {e:?}");
                         }
                     }
                 }
@@ -227,9 +242,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                     }
                     _ => {
                         retry_cnt += 1;
-                        if retry_cnt == MAX_RETRIES {
+                        if retry_cnt == self.max_retries {
                             return Err(
-                                format!("Transfer timed out after {MAX_RETRIES} tries").into()
+                                format!("Transfer timed out after {} tries", self.max_retries).into()
                             );
                         }
                     }
