@@ -109,16 +109,16 @@ impl<T: Socket + ?Sized> Worker<T> {
         Ok(handle)
     }
 
-    /// Receives a file from the remote [`SocketAddr`] that has sent a write request using
+    /// Receives a file from the remote [`SocketAddr`] (client or server) using
     /// the supplied socket, asynchronously.
-    pub fn receive(self) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub fn receive(self, transfer_size: usize) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let clean_on_error = self.clean_on_error;
         let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
         let handle = thread::spawn(move || {
             let handle_receive = || -> Result<(), Box<dyn Error>> {
-                self.receive_file(File::create(&file_path)?)?;
+                self.receive_file(File::create(&file_path)?, transfer_size)?;
 
                 Ok(())
             };
@@ -169,6 +169,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     retry_cnt += 1;
                 }
 
+                // Timeout for recv is constant but we should wait until last_tx_time + timeout
                 match self.socket.recv() {
                     Ok(Packet::Ack(received_block_number)) => {
                         let diff = received_block_number.wrapping_sub(block_number);
@@ -209,7 +210,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         Ok(())
     }
 
-    fn receive_file(self, file: File) -> Result<(), Box<dyn Error>> {
+    fn receive_file(self, file: File, transfer_size: usize) -> Result<(), Box<dyn Error>> {
         let mut block_number: u16 = 0;
         let mut window = Window::new(self.windowsize, self.blk_size, file);
 
@@ -255,6 +256,10 @@ impl<T: Socket + ?Sized> Worker<T> {
             self.send_packet(&Packet::Ack(block_number))?;
 
             if size < self.blk_size {
+                if transfer_size != 0 && transfer_size != window.file_len()? {
+                    return Err(format!("Size mismatch, megociated: {}, transferred: {}", 
+                        transfer_size, window.file_len()?).into());
+                }
                 break;
             };
         }
@@ -286,15 +291,18 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn check_response(&self) -> Result<(), Box<dyn Error>> {
-        if let Packet::Ack(received_block_number) = self.socket.recv()? {
-            if received_block_number != 0 {
-                self.socket.send(&Packet::Error {
-                    code: ErrorCode::IllegalOperation,
-                    msg: "invalid oack response".to_string(),
-                })?;
+        let pkt = self.socket.recv()?;
+        if let Packet::Ack(received_block_number) = pkt {
+            if received_block_number == 0 {
+                return Ok(());
             }
         }
 
-        Ok(())
+        self.socket.send(&Packet::Error {
+            code: ErrorCode::IllegalOperation,
+            msg: "invalid oack response".to_string(),
+        })?;
+
+        Err(format!("Unexpected packet received instead of Ack(0): {pkt:#?}").into())
     }
 }

@@ -30,11 +30,12 @@ pub struct Client {
     blocksize: usize,
     windowsize: u16,
     timeout: Duration,
-    max_retries : usize,
+    max_retries: usize,
     mode: Mode,
     file_path: PathBuf,
     receive_directory: PathBuf,
     clean_on_error: bool,
+    transfer_size: usize,
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -59,6 +60,7 @@ impl Client {
             file_path: config.file_path.clone(),
             receive_directory: config.receive_directory.clone(),
             clean_on_error: config.clean_on_error,
+            transfer_size: 0,
         })
     }
 
@@ -77,7 +79,7 @@ impl Client {
         }
     }
 
-    fn prepare_options(&self, size : usize) -> Vec<TransferOption> {
+    fn prepare_options(&self) -> Vec<TransferOption> {
         let mut options = vec![
             TransferOption {
                 option: OptionType::BlockSize,
@@ -89,7 +91,7 @@ impl Client {
             },
             TransferOption {
                 option: OptionType::TransferSize,
-                value: size,
+                value: self.transfer_size,
             },
         ];
 
@@ -121,14 +123,14 @@ impl Client {
             .ok_or("Filename is not valid UTF-8")?
             .to_owned();
 
-        let size = fs::metadata(self.file_path.clone())?.len() as usize;
+        self.transfer_size = fs::metadata(self.file_path.clone())?.len() as usize;
 
         Socket::send_to(
             &socket,
             &Packet::Wrq {
                 filename,
                 mode: "octet".into(),
-                options : self.prepare_options(size),
+                options : self.prepare_options(),
             },
             &self.remote_address,
         )?;
@@ -185,7 +187,7 @@ impl Client {
             &Packet::Rrq {
                 filename,
                 mode: "octet".into(),
-                options : self.prepare_options(0),
+                options : self.prepare_options(),
             },
             &self.remote_address,
         )?;
@@ -199,11 +201,16 @@ impl Client {
                         self.verify_oack(&options)?;
                         Socket::send_to(&socket, &Packet::Ack(0), &from)?;
                         let worker = self.configure_worker(socket)?;
-                        let join_handle = worker.receive()?;
+                        let join_handle = worker.receive(self.transfer_size)?;
                         let _ = join_handle.join();
 
                         Ok(())
                     }
+                    
+                    // We could implement this by forwarding Option<packet::Data> to worker.receive()
+                    Packet::Data { .. } => Err(
+                        "Client received data instead of o-ack. This implementation \
+                        does not support servers without options (RFC 2347)".into()),
                     
                     Packet::Error { code, msg } => Err(Box::from(format!(
                         "Client received error from server: {code}: {msg}"))),
@@ -219,9 +226,11 @@ impl Client {
     fn verify_oack(&mut self, options: &Vec<TransferOption>) -> Result<(), Box<dyn Error>> {
         for option in options {
             match option.option {
-                OptionType::BlockSize {} => self.blocksize = option.value,
+                OptionType::BlockSize => self.blocksize = option.value,
                 OptionType::Windowsize => self.windowsize = option.value as u16,
-                _ => {}
+                OptionType::Timeout => self.timeout = Duration::from_secs(option.value as u64),
+                OptionType::TimeoutMs => self.timeout = Duration::from_millis(option.value as u64),
+                OptionType::TransferSize => self.transfer_size = option.value,
             }
         }
 
