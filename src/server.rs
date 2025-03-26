@@ -240,7 +240,7 @@ impl Server {
                 self.duplicate_packets + 1,
                 self.max_retries,
             );
-            worker.receive()?;
+            worker.receive(worker_options.transfer_size)?;
             Ok(())
         };
 
@@ -289,7 +289,7 @@ impl Server {
 #[derive(Debug, PartialEq)]
 struct WorkerOptions {
     block_size: usize,
-    transfer_size: u64,
+    transfer_size: usize,
     timeout: Duration,
     window_size: u16,
 }
@@ -335,9 +335,9 @@ fn parse_options(
             OptionType::TransferSize => match request_type {
                 RequestType::Read(size) => {
                     *value = size as usize;
-                    worker_options.transfer_size = size;
+                    worker_options.transfer_size = size as usize;
                 }
-                RequestType::Write => worker_options.transfer_size = *value as u64,
+                RequestType::Write => worker_options.transfer_size = *value as usize,
             },
             OptionType::Timeout => {
                 if *value == 0 {
