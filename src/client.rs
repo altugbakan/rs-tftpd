@@ -30,6 +30,7 @@ pub struct Client {
     blocksize: usize,
     windowsize: u16,
     timeout: Duration,
+    timeout_req: Duration,
     max_retries: usize,
     mode: Mode,
     file_path: PathBuf,
@@ -55,6 +56,7 @@ impl Client {
             blocksize: config.blocksize,
             windowsize: config.windowsize,
             timeout: config.timeout,
+            timeout_req: config.timeout_req,
             max_retries: config.max_retries,
             mode: config.mode,
             file_path: config.file_path.clone(),
@@ -72,6 +74,8 @@ impl Client {
         } else {
             UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0))?
         };
+
+        socket.set_read_timeout(Some(self.timeout_req))?;
 
         match self.mode {
             Mode::Upload => self.upload(socket),

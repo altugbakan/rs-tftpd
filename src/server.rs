@@ -337,7 +337,7 @@ fn parse_options(
                     *value = size as usize;
                     worker_options.transfer_size = size as usize;
                 }
-                RequestType::Write => worker_options.transfer_size = *value as usize,
+                RequestType::Write => worker_options.transfer_size = *value,
             },
             OptionType::Timeout => {
                 if *value == 0 {

@@ -4,7 +4,7 @@ use crate::server::{
     DEFAULT_BLOCK_SIZE, 
     DEFAULT_WINDOW_SIZE,
     DEFAULT_TIMEOUT, 
-    DEFAULT_MAX_RETRIES };
+    DEFAULT_MAX_RETRIES};
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -38,6 +38,8 @@ pub struct ClientConfig {
     pub windowsize: u16,
     /// Timeout to use during transfer. (default: 5s)
     pub timeout: Duration,
+    /// Timeout to use after request. (default: 5s)
+    pub timeout_req: Duration,
     /// Max count of retires (default: 6)
     pub max_retries: usize,
     /// Upload or Download a file. (default: Download)
@@ -58,12 +60,27 @@ impl Default for ClientConfig {
             blocksize: DEFAULT_BLOCK_SIZE,
             windowsize: DEFAULT_WINDOW_SIZE,
             timeout: DEFAULT_TIMEOUT,
+            timeout_req: DEFAULT_TIMEOUT,
             max_retries: DEFAULT_MAX_RETRIES,
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
             clean_on_error: true,
         }
+    }
+}
+
+
+fn parse_duration<T : Iterator<Item = String>>(args : &mut T) -> Result<Duration, Box<dyn Error>> {
+    if let Some(dur_str) = args.next() {
+        let dur = Duration::from_secs_f32(dur_str.parse::<f32>()?);
+        if dur < Duration::from_secs_f32(0.001) {
+            Err("duration cannot be shorter than 1 ms".into())
+        } else {
+            Ok(dur)
+        }
+    } else {
+        Err("Missing duration after flag".into())
     }
 }
 
@@ -105,18 +122,10 @@ impl ClientConfig {
                     }
                 }
                 "-t" | "--timeout" => {
-                    if let Some(timeout_str) = args.next() {
-                        if timeout_str.contains('.') {
-                            config.timeout = Duration::from_secs_f32(timeout_str.parse::<f32>()?);
-                            if config.timeout < Duration::from_secs_f32(0.001) {
-                                return Err("timeout cannot be shorter than 1 ms".into());
-                            }                           
-                        } else {
-                            config.timeout = Duration::from_secs(timeout_str.parse::<u64>()?);
-                        }
-                    } else {
-                        return Err("Missing timeout after flag".into());
-                    }
+                    config.timeout = parse_duration(&mut args)?;
+                }
+                "-T" | "--timeout-req" => {
+                    config.timeout_req = parse_duration(&mut args)?;
                 }
                 "-m" | "--maxretries" => {
                     if let Some(retries_str) = args.next() {
@@ -148,17 +157,18 @@ impl ClientConfig {
                     println!("TFTP Client\n");
                     println!("Usage: tftpd client <File> [OPTIONS]\n");
                     println!("Options:");
-                    println!("  -i, --ip-address <IP ADDRESS>\t\tIp address of the server (default: 127.0.0.1)");
-                    println!("  -p, --port <PORT>\t\t\tPort of the server (default: 69)");
-                    println!("  -b, --blocksize <number>\t\tSets the blocksize (default: 512)");
-                    println!("  -w, --windowsize <number>\t\tSets the windowsize (default: 1)");
-                    println!("  -t, --timeout <seconds>\t\tSets the timeout in seconds (default: 5)");
-                    println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
-                    println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
-                    println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
-                    println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
-                    println!("  --keep-on-error\t\t\tPrevent client from deleting files after receiving errors");
-                    println!("  -h, --help\t\t\t\tPrint help information");
+                    println!("  -i, --ip-address <IP ADDRESS>\t\tIP address of the server (default: 127.0.0.1)");
+                    println!("  -p, --port <PORT>\t\t\tUDP port of the server (default: 69)");
+                    println!("  -b, --blocksize <number>\t\tset the blocksize (default: 512)");
+                    println!("  -w, --windowsize <number>\t\tset the windowsize (default: 1)");
+                    println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
+                    println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
+                    println!("  -m, --maxretries <cnt>\t\tset the max retries count (default: 6)");
+                    println!("  -u, --upload\t\t\t\tselect upload mode, ignores previous flags");
+                    println!("  -d, --download\t\t\tselect download mode, ignores previous flags");
+                    println!("  -rd, --receive-directory <DIR>\tdirectory to receive files when in Download mode (default: current)");
+                    println!("  --keep-on-error\t\t\tprevent client from deleting files after receiving errors");
+                    println!("  -h, --help\t\t\t\tprint help information");
                     process::exit(0);
                 }
                 "--" => {
