@@ -1,4 +1,7 @@
-use crate::client_config::{DEFAULT_BLOCKSIZE, DEFAULT_TIMEOUT, DEFAULT_WINDOWSIZE};
+use crate::server::{
+    DEFAULT_BLOCK_SIZE, 
+    DEFAULT_WINDOW_SIZE,
+    DEFAULT_TIMEOUT };
 use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, Worker};
 use std::cmp::PartialEq;
 use std::error::Error;
@@ -27,6 +30,7 @@ pub struct Client {
     blocksize: usize,
     windowsize: u16,
     timeout: Duration,
+    max_retries : usize,
     mode: Mode,
     file_path: PathBuf,
     receive_directory: PathBuf,
@@ -50,6 +54,7 @@ impl Client {
             blocksize: config.blocksize,
             windowsize: config.windowsize,
             timeout: config.timeout,
+            max_retries: config.max_retries,
             mode: config.mode,
             file_path: config.file_path.clone(),
             receive_directory: config.receive_directory.clone(),
@@ -142,8 +147,8 @@ impl Client {
                     }
 
                     Packet::Ack(_) => {
-                        self.blocksize = DEFAULT_BLOCKSIZE;
-                        self.windowsize = DEFAULT_WINDOWSIZE;
+                        self.blocksize = DEFAULT_BLOCK_SIZE;
+                        self.windowsize = DEFAULT_WINDOW_SIZE;
                         self.timeout = DEFAULT_TIMEOUT;
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
@@ -242,9 +247,10 @@ impl Client {
                 file,
                 self.clean_on_error,
                 self.blocksize,
-                DEFAULT_TIMEOUT,
+                self.timeout,
                 self.windowsize,
                 1,
+                self.max_retries,
             )
         } else {
             Worker::new(
@@ -252,9 +258,10 @@ impl Client {
                 self.file_path.clone(),
                 self.clean_on_error,
                 self.blocksize,
-                DEFAULT_TIMEOUT,
+                self.timeout,
                 self.windowsize,
                 1,
+                self.max_retries,
             )
         };
 

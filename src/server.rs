@@ -8,9 +8,10 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-const DEFAULT_BLOCK_SIZE: usize = 512;
-const DEFAULT_WINDOW_SIZE: u16 = 1;
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+pub const DEFAULT_BLOCK_SIZE: usize = 512;
+pub const DEFAULT_WINDOW_SIZE: u16 = 1;
+pub const DEFAULT_MAX_RETRIES: usize = 6;
 
 /// Server `struct` is used for handling incoming TFTP requests.
 ///
@@ -38,6 +39,7 @@ pub struct Server {
     duplicate_packets: u8,
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
+    max_retries: usize,
 }
 
 impl Server {
@@ -55,6 +57,7 @@ impl Server {
             duplicate_packets: config.duplicate_packets,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
+            max_retries: config.max_retries,
         };
 
         Ok(server)
@@ -164,7 +167,7 @@ impl Server {
                 let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
-                    let single_socket = create_single_socket(&self.socket, to)?;
+                    let single_socket = create_single_socket(&self.socket, to, worker_options.timeout)?;
                     self.clients.insert(*to, single_socket.sender());
                     self.largest_block_size =
                         max(self.largest_block_size, worker_options.block_size);
@@ -191,6 +194,7 @@ impl Server {
                     worker_options.timeout,
                     worker_options.window_size,
                     self.duplicate_packets + 1,
+                    self.max_retries,
                 );
                 worker.send(!options.is_empty())?;
                 Ok(())
@@ -212,7 +216,7 @@ impl Server {
             let mut socket: Box<dyn Socket>;
 
             if self.single_port {
-                let single_socket = create_single_socket(&self.socket, to)?;
+                let single_socket = create_single_socket(&self.socket, to, worker_options.timeout)?;
                 self.clients.insert(*to, single_socket.sender());
                 self.largest_block_size = max(self.largest_block_size, worker_options.block_size);
 
@@ -234,6 +238,7 @@ impl Server {
                 worker_options.timeout,
                 worker_options.window_size,
                 self.duplicate_packets + 1,
+                self.max_retries,
             );
             worker.receive()?;
             Ok(())
@@ -358,8 +363,9 @@ fn parse_options(
 fn create_single_socket(
     socket: &UdpSocket,
     remote: &SocketAddr,
+    timeout: Duration,
 ) -> Result<ServerSocket, Box<dyn Error>> {
-    let socket = ServerSocket::new(socket.try_clone()?, *remote);
+    let socket = ServerSocket::new(socket.try_clone()?, *remote, timeout);
 
     Ok(socket)
 }

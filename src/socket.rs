@@ -9,7 +9,6 @@ use std::{
     time::Duration,
 };
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_REQUEST_PACKET_SIZE: usize = 512;
 
 /// Socket `trait` is used to allow building custom sockets to be used for
@@ -167,14 +166,14 @@ impl Socket for ServerSocket {
 
 impl ServerSocket {
     /// Creates a new [`ServerSocket`] from a [`UdpSocket`] and a remote [`SocketAddr`].
-    pub fn new(socket: UdpSocket, remote: SocketAddr) -> Self {
+    pub fn new(socket: UdpSocket, remote: SocketAddr, timeout: Duration) -> Self {
         let (sender, receiver) = mpsc::channel();
         Self {
             socket,
             remote,
             sender: Mutex::new(sender),
             receiver: Mutex::new(receiver),
-            timeout: DEFAULT_TIMEOUT,
+            timeout,
         }
     }
 

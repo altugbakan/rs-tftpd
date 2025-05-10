@@ -1,5 +1,10 @@
 use crate::client::Mode;
 use crate::server::convert_file_path;
+use crate::server::{
+    DEFAULT_BLOCK_SIZE, 
+    DEFAULT_WINDOW_SIZE,
+    DEFAULT_TIMEOUT, 
+    DEFAULT_MAX_RETRIES };
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -33,6 +38,8 @@ pub struct ClientConfig {
     pub windowsize: u16,
     /// Timeout to use during transfer. (default: 5s)
     pub timeout: Duration,
+    /// Max count of retires (default: 6)
+    pub max_retries: usize,
     /// Upload or Download a file. (default: Download)
     pub mode: Mode,
     /// Download directory of the TFTP Client. (default: current working directory)
@@ -43,18 +50,15 @@ pub struct ClientConfig {
     pub clean_on_error: bool,
 }
 
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-pub const DEFAULT_BLOCKSIZE: usize = 512;
-pub const DEFAULT_WINDOWSIZE: u16 = 1;
-
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             remote_ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port: 69,
-            blocksize: DEFAULT_BLOCKSIZE,
-            windowsize: DEFAULT_WINDOWSIZE,
+            blocksize: DEFAULT_BLOCK_SIZE,
+            windowsize: DEFAULT_WINDOW_SIZE,
             timeout: DEFAULT_TIMEOUT,
+            max_retries: DEFAULT_MAX_RETRIES,
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
@@ -114,6 +118,13 @@ impl ClientConfig {
                         return Err("Missing timeout after flag".into());
                     }
                 }
+                "-m" | "--maxretries" => {
+                    if let Some(retries_str) = args.next() {
+                        config.max_retries = retries_str.parse::<usize>()?;
+                    } else {
+                        return Err("Missing max retries after flag".into());
+                    }
+                }
                 "-rd" | "--receive-directory" => {
                     if let Some(dir_str) = args.next() {
                         if !Path::new(&dir_str).exists() {
@@ -142,6 +153,7 @@ impl ClientConfig {
                     println!("  -b, --blocksize <number>\t\tSets the blocksize (default: 512)");
                     println!("  -w, --windowsize <number>\t\tSets the windowsize (default: 1)");
                     println!("  -t, --timeout <seconds>\t\tSets the timeout in seconds (default: 5)");
+                    println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
                     println!("  -u, --upload\t\t\t\tSets the client to upload mode, Ignores all previous download flags");
                     println!("  -d, --download\t\t\tSet the client to download mode, Invalidates all previous upload flags");
                     println!("  -rd, --receive-directory <DIRECTORY>\tSet the directory to receive files when in Download mode (default: current working directory)");
@@ -149,15 +161,30 @@ impl ClientConfig {
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
+                "--" => {
+                    while let Some(arg) = args.next() {
+                        if !config.file_path.as_os_str().is_empty() {
+                            return Err("too many arguments".into());
+                        }
+                        config.file_path = convert_file_path(arg.as_str());
+                    }
+                }
                 filename => {
+                    if !config.file_path.as_os_str().is_empty() {
+                        return Err("too many arguments".into());
+                    }
+                    
+                    if filename.starts_with('-') {
+                        return Err(format!("unkwon flag {filename} (or use '--' to force into filename)").into());
+                    }
                     config.file_path = convert_file_path(filename);
                 }
             }
         }
 
-                if config.file_path.as_os_str().is_empty() {
-                    return Err("missing filename".into());
-                }
+        if config.file_path.as_os_str().is_empty() {
+            return Err("missing filename".into());
+        }
 
         Ok(config)
     }

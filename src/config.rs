@@ -3,6 +3,8 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
+use crate::server::DEFAULT_MAX_RETRIES;
+
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
 ///
@@ -39,6 +41,8 @@ pub struct Config {
     pub overwrite: bool,
     /// Should clean (delete) files after receiving errors. (default: true)
     pub clean_on_error: bool,
+    /// Max count of retires (default: 6)
+    pub max_retries: usize,
 }
 
 impl Default for Config {
@@ -54,6 +58,7 @@ impl Default for Config {
             duplicate_packets: Default::default(),
             overwrite: Default::default(),
             clean_on_error: true,
+            max_retries: DEFAULT_MAX_RETRIES,
         }
     }
 }
@@ -119,6 +124,13 @@ impl Config {
                 "-r" | "--read-only" => {
                     config.read_only = true;
                 }
+                "-m" | "--maxretries" => {
+                    if let Some(retries_str) = args.next() {
+                        config.max_retries = retries_str.parse::<usize>()?;
+                    } else {
+                        return Err("Missing max retries after flag".into());
+                    }
+                }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
@@ -130,6 +142,7 @@ impl Config {
                     println!("  -sd, --send-directory <DIRECTORY>\tSet the directory to send files from (default: the directory setting)");
                     println!("  -s, --single-port\t\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
+                    println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
                     println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
                     println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
