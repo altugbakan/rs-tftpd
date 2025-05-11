@@ -112,6 +112,11 @@ impl Window {
     pub fn is_full(&self) -> bool {
         self.elements.len() as u16 == self.size
     }
+
+    /// Returns the length of the file
+    pub fn file_len(&self) -> Result<usize, Box<dyn Error>> {
+        Ok(self.file.metadata()?.len() as usize)
+    }
 }
 
 #[cfg(test)]
