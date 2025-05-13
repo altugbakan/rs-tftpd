@@ -3,6 +3,7 @@ use crate::server::convert_file_path;
 use crate::server::{
     DEFAULT_BLOCK_SIZE, 
     DEFAULT_WINDOW_SIZE,
+    DEFAULT_WINDOW_WAIT,
     DEFAULT_TIMEOUT, 
     DEFAULT_MAX_RETRIES};
 use std::error::Error;
@@ -36,6 +37,8 @@ pub struct ClientConfig {
     pub blocksize: usize,
     /// Windowsize to use during transfer. (default: 1)
     pub windowsize: u16,
+    /// Inter packets wait delay in windows (default: 10ms)
+    pub window_wait: Duration,
     /// Timeout to use during transfer. (default: 5s)
     pub timeout: Duration,
     /// Timeout to use after request. (default: 5s)
@@ -62,6 +65,7 @@ impl Default for ClientConfig {
             timeout: DEFAULT_TIMEOUT,
             timeout_req: DEFAULT_TIMEOUT,
             max_retries: DEFAULT_MAX_RETRIES,
+            window_wait: DEFAULT_WINDOW_WAIT,
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
@@ -121,6 +125,9 @@ impl ClientConfig {
                         return Err("Missing windowsize after flag".into());
                     }
                 }
+                "-W" | "--wait" => {
+                    config.window_wait = parse_duration(&mut args)?;
+                }
                 "-t" | "--timeout" => {
                     config.timeout = parse_duration(&mut args)?;
                 }
@@ -161,6 +168,7 @@ impl ClientConfig {
                     println!("  -p, --port <PORT>\t\t\tUDP port of the server (default: 69)");
                     println!("  -b, --blocksize <number>\t\tset the blocksize (default: 512)");
                     println!("  -w, --windowsize <number>\t\tset the windowsize (default: 1)");
+                    println!("  -W, --wait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0.01)");
                     println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
                     println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
                     println!("  -m, --maxretries <cnt>\t\tset the max retries count (default: 6)");
@@ -208,7 +216,6 @@ mod tests {
     fn parses_full_config() {
         let config = ClientConfig::new(
             [
-                "client",
                 "test.file",
                 "-i",
                 "0.0.0.0",
@@ -245,7 +252,7 @@ mod tests {
     #[test]
     fn parses_partial_config() {
         let config = ClientConfig::new(
-            ["client", "test.file", "-d", "-b", "2048", "-p", "2000"]
+            ["test.file", "-d", "-b", "2048", "-p", "2000"]
                 .iter()
                 .map(|s| s.to_string()),
         )
@@ -260,7 +267,7 @@ mod tests {
     #[test]
     fn parses_file_paths() {
         let config =
-            ClientConfig::new(["client", "test/test.file"].iter().map(|s| s.to_string())).unwrap();
+            ClientConfig::new(["test/test.file"].iter().map(|s| s.to_string())).unwrap();
 
         let mut path = PathBuf::new();
         path.push("test");
@@ -269,7 +276,7 @@ mod tests {
         assert_eq!(config.file_path, path);
 
         let config = ClientConfig::new(
-            ["client", "test\\test\\test.file"]
+            ["test\\test\\test.file"]
                 .iter()
                 .map(|s| s.to_string()),
         )

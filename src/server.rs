@@ -11,6 +11,7 @@ use std::time::Duration;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const DEFAULT_BLOCK_SIZE: usize = 512;
 pub const DEFAULT_WINDOW_SIZE: u16 = 1;
+pub const DEFAULT_WINDOW_WAIT: Duration = Duration::from_millis(1);
 pub const DEFAULT_MAX_RETRIES: usize = 6;
 
 /// Server `struct` is used for handling incoming TFTP requests.
@@ -193,6 +194,7 @@ impl Server {
                     worker_options.block_size,
                     worker_options.timeout,
                     worker_options.window_size,
+                    DEFAULT_WINDOW_WAIT,
                     self.duplicate_packets + 1,
                     self.max_retries,
                 );
@@ -237,6 +239,7 @@ impl Server {
                 worker_options.block_size,
                 worker_options.timeout,
                 worker_options.window_size,
+                DEFAULT_WINDOW_WAIT,
                 self.duplicate_packets + 1,
                 self.max_retries,
             );
@@ -302,7 +305,7 @@ enum RequestType {
 
 pub fn convert_file_path(filename: &str) -> PathBuf {
     let formatted_filename = filename
-        .trim_start_matches(|c| c == '/' || c == '\\')
+        .trim_start_matches(['/', '\\'])
         .to_string();
     let normalized_filename = if MAIN_SEPARATOR == '\\' {
         formatted_filename.replace('/', "\\")
