@@ -203,7 +203,9 @@ pub enum OptionType {
     /// Timeout in ms option type
     TimeoutMs,
     /// Windowsize option type
-    Windowsize,
+    WindowSize,
+    /// Windowwait option type
+    WindowWait,
 }
 
 impl OptionType {
@@ -214,7 +216,8 @@ impl OptionType {
             OptionType::TransferSize => "tsize",
             OptionType::Timeout => "timeout",
             OptionType::TimeoutMs => "timeoutms",
-            OptionType::Windowsize => "windowsize",
+            OptionType::WindowSize => "windowsize",
+            OptionType::WindowWait => "windowwait",
         }
     }
 }
@@ -229,7 +232,8 @@ impl FromStr for OptionType {
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
             "timeoutms" => Ok(OptionType::TimeoutMs),
-            "windowsize" => Ok(OptionType::Windowsize),
+            "windowsize" => Ok(OptionType::WindowSize),
+            "windowwait" => Ok(OptionType::WindowWait),
             _ => Err("Invalid option type"),
         }
     }
@@ -501,7 +505,7 @@ mod tests {
             &[0x00],
             ("5".as_bytes()),
             &[0x00],
-            (OptionType::Windowsize.as_str().as_bytes()),
+            (OptionType::WindowSize.as_str().as_bytes()),
             &[0x00],
             ("4".as_bytes()),
             &[0x00],
@@ -534,7 +538,7 @@ mod tests {
             assert_eq!(
                 options[2],
                 TransferOption {
-                    option: OptionType::Windowsize,
+                    option: OptionType::WindowSize,
                     value: 4
                 }
             );
@@ -660,7 +664,7 @@ mod tests {
             &[0x00],
             ("5".as_bytes()),
             &[0x00],
-            (OptionType::Windowsize.as_str().as_bytes()),
+            (OptionType::WindowSize.as_str().as_bytes()),
             &[0x00],
             ("4".as_bytes()),
             &[0x00],
@@ -686,7 +690,7 @@ mod tests {
             assert_eq!(
                 options[2],
                 TransferOption {
-                    option: OptionType::Windowsize,
+                    option: OptionType::WindowSize,
                     value: 4
                 }
             );
@@ -761,7 +765,7 @@ mod tests {
                         value: 1468,
                     },
                     TransferOption {
-                        option: OptionType::Windowsize,
+                        option: OptionType::WindowSize,
                         value: 1,
                     },
                     TransferOption {
@@ -805,7 +809,7 @@ mod tests {
                         value: 1468,
                     },
                     TransferOption {
-                        option: OptionType::Windowsize,
+                        option: OptionType::WindowSize,
                         value: 1,
                     },
                     TransferOption {

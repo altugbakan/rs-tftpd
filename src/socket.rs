@@ -1,5 +1,6 @@
 use crate::Packet;
 use std::{
+    io::{Error as IoError, ErrorKind},
     error::Error,
     net::{SocketAddr, UdpSocket},
     sync::{
@@ -47,6 +48,9 @@ pub trait Socket: Send + Sync + 'static {
     fn set_read_timeout(&mut self, dur: Duration) -> Result<(), Box<dyn Error>>;
     /// Sets the write timeout for the [`Socket`].
     fn set_write_timeout(&mut self, dur: Duration) -> Result<(), Box<dyn Error>>;
+
+    /// Sets the [`Socket`] as blocking or not.
+    fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), Box<dyn Error>>;
 }
 
 impl Socket for UdpSocket {
@@ -93,6 +97,12 @@ impl Socket for UdpSocket {
 
         Ok(())
     }
+
+    fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), Box<dyn Error>> {
+        UdpSocket::set_nonblocking(self, nonblocking)?;
+
+        Ok(())
+    }
 }
 
 /// ServerSocket `struct` is used as an abstraction layer for a server
@@ -120,6 +130,7 @@ pub struct ServerSocket {
     sender: Mutex<Sender<Packet>>,
     receiver: Mutex<Receiver<Packet>>,
     timeout: Duration,
+    nonblocking: bool,
 }
 
 impl Socket for ServerSocket {
@@ -135,7 +146,13 @@ impl Socket for ServerSocket {
 
     fn recv_with_size(&self, _size: usize) -> Result<Packet, Box<dyn Error>> {
         if let Ok(receiver) = self.receiver.lock() {
-            if let Ok(packet) = receiver.recv_timeout(self.timeout) {
+            if self.nonblocking {
+                if let Ok(packet) = receiver.try_recv() {
+                    Ok(packet)
+                } else {
+                    Err(IoError::from(ErrorKind::WouldBlock).into())
+                }
+            } else if let Ok(packet) = receiver.recv_timeout(self.timeout) {
                 Ok(packet)
             } else {
                 Err("Failed to receive".into())
@@ -164,6 +181,13 @@ impl Socket for ServerSocket {
 
         Ok(())
     }
+
+    fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), Box<dyn Error>> {
+        self.nonblocking = nonblocking;
+        self.socket.set_nonblocking(nonblocking)?;
+
+        Ok(())
+    }
 }
 
 impl ServerSocket {
@@ -176,6 +200,7 @@ impl ServerSocket {
             sender: Mutex::new(sender),
             receiver: Mutex::new(receiver),
             timeout,
+            nonblocking: false,
         }
     }
 
@@ -212,6 +237,10 @@ impl<T: Socket + ?Sized> Socket for Box<T> {
 
     fn set_write_timeout(&mut self, dur: Duration) -> Result<(), Box<dyn Error>> {
         (**self).set_write_timeout(dur)
+    }
+
+    fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), Box<dyn Error>> {
+        (**self).set_nonblocking(nonblocking)
     }
 }
 

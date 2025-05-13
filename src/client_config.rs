@@ -1,10 +1,10 @@
 use crate::client::Mode;
 use crate::server::convert_file_path;
 use crate::server::{
-    DEFAULT_BLOCK_SIZE, 
+    DEFAULT_BLOCK_SIZE,
     DEFAULT_WINDOW_SIZE,
     DEFAULT_WINDOW_WAIT,
-    DEFAULT_TIMEOUT, 
+    DEFAULT_TIMEOUT,
     DEFAULT_MAX_RETRIES};
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
@@ -36,7 +36,7 @@ pub struct ClientConfig {
     /// Blocksize to use during transfer. (default: 512)
     pub blocksize: usize,
     /// Windowsize to use during transfer. (default: 1)
-    pub windowsize: u16,
+    pub window_size: u16,
     /// Inter packets wait delay in windows (default: 10ms)
     pub window_wait: Duration,
     /// Timeout to use during transfer. (default: 5s)
@@ -61,11 +61,11 @@ impl Default for ClientConfig {
             remote_ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port: 69,
             blocksize: DEFAULT_BLOCK_SIZE,
-            windowsize: DEFAULT_WINDOW_SIZE,
+            window_size: DEFAULT_WINDOW_SIZE,
+            window_wait: DEFAULT_WINDOW_WAIT,
             timeout: DEFAULT_TIMEOUT,
             timeout_req: DEFAULT_TIMEOUT,
             max_retries: DEFAULT_MAX_RETRIES,
-            window_wait: DEFAULT_WINDOW_WAIT,
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
@@ -120,12 +120,12 @@ impl ClientConfig {
                 }
                 "-w" | "--windowsize" => {
                     if let Some(windowsize_str) = args.next() {
-                        config.windowsize = windowsize_str.parse::<u16>()?;
+                        config.window_size = windowsize_str.parse::<u16>()?;
                     } else {
                         return Err("Missing windowsize after flag".into());
                     }
                 }
-                "-W" | "--wait" => {
+                "-W" | "--windowwait" => {
                     config.window_wait = parse_duration(&mut args)?;
                 }
                 "-t" | "--timeout" => {
@@ -168,7 +168,7 @@ impl ClientConfig {
                     println!("  -p, --port <PORT>\t\t\tUDP port of the server (default: 69)");
                     println!("  -b, --blocksize <number>\t\tset the blocksize (default: 512)");
                     println!("  -w, --windowsize <number>\t\tset the windowsize (default: 1)");
-                    println!("  -W, --wait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0.01)");
+                    println!("  -W, --windowwait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0.01)");
                     println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
                     println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
                     println!("  -m, --maxretries <cnt>\t\tset the max retries count (default: 6)");
@@ -191,7 +191,7 @@ impl ClientConfig {
                     if !config.file_path.as_os_str().is_empty() {
                         return Err("too many arguments".into());
                     }
-                    
+
                     if filename.starts_with('-') {
                         return Err(format!("unkwon flag {filename} (or use '--' to force into filename)").into());
                     }
@@ -229,6 +229,8 @@ mod tests {
                 "1024",
                 "-w",
                 "2",
+                "-W",
+                "0.02",
                 "-t",
                 "4",
                 "--keep-on-error",
@@ -242,7 +244,8 @@ mod tests {
         assert_eq!(config.port, 1234);
         assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.file_path, PathBuf::from("test.file"));
-        assert_eq!(config.windowsize, 2);
+        assert_eq!(config.window_size, 2);
+        assert_eq!(config.window_wait, Duration::from_millis(20));
         assert_eq!(config.blocksize, 1024);
         assert_eq!(config.mode, Mode::Upload);
         assert_eq!(config.timeout, Duration::from_secs(4));

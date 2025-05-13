@@ -1,6 +1,7 @@
 use crate::server::{
-    DEFAULT_BLOCK_SIZE, 
+    DEFAULT_BLOCK_SIZE,
     DEFAULT_WINDOW_SIZE,
+    DEFAULT_WINDOW_WAIT,
     DEFAULT_TIMEOUT };
 use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, Worker};
 use std::cmp::PartialEq;
@@ -28,11 +29,11 @@ use std::time::Duration;
 pub struct Client {
     remote_address: SocketAddr,
     blocksize: usize,
-    windowsize: u16,
+    window_size: u16,
+    window_wait: Duration,
     timeout: Duration,
     timeout_req: Duration,
     max_retries: usize,
-    window_wait: Duration,
     mode: Mode,
     file_path: PathBuf,
     receive_directory: PathBuf,
@@ -55,7 +56,7 @@ impl Client {
         Ok(Client {
             remote_address: SocketAddr::from((config.remote_ip_address, config.port)),
             blocksize: config.blocksize,
-            windowsize: config.windowsize,
+            window_size: config.window_size,
             window_wait: config.window_wait,
             timeout: config.timeout,
             timeout_req: config.timeout_req,
@@ -92,14 +93,21 @@ impl Client {
                 value: self.blocksize,
             },
             TransferOption {
-                option: OptionType::Windowsize,
-                value: self.windowsize as usize,
-            },
-            TransferOption {
                 option: OptionType::TransferSize,
                 value: self.transfer_size,
             },
+            TransferOption {
+                option: OptionType::WindowSize,
+                value: self.window_size as usize,
+            },
         ];
+
+        if self.window_wait.as_millis() != 0 {
+            options.push(TransferOption {
+                option: OptionType::WindowWait,
+                value: self.window_wait.as_millis() as usize,
+            });
+        }
 
         options.push(if self.timeout.subsec_millis() == 0 {
             TransferOption {
@@ -110,7 +118,7 @@ impl Client {
             TransferOption {
                 option: OptionType::TimeoutMs,
                 value: self.timeout.as_millis() as usize,
-            }           
+            }
         });
 
         options
@@ -156,7 +164,8 @@ impl Client {
 
                     Packet::Ack(_) => {
                         self.blocksize = DEFAULT_BLOCK_SIZE;
-                        self.windowsize = DEFAULT_WINDOW_SIZE;
+                        self.window_size = DEFAULT_WINDOW_SIZE;
+                        self.window_wait = DEFAULT_WINDOW_WAIT;
                         self.timeout = DEFAULT_TIMEOUT;
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
@@ -169,7 +178,7 @@ impl Client {
                         "Client received error from server: {code}: {msg}"))),
 
                     _ => Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"))), 
+                        "Client received unexpected packet from server: {packet:#?}"))),
                 }
             }
             Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
@@ -180,7 +189,7 @@ impl Client {
         if self.mode != Mode::Download {
             return Err(Box::from("Client mode is set to Upload"));
         }
-        
+
         let filename = self
             .file_path
             .clone()
@@ -212,18 +221,18 @@ impl Client {
 
                         Ok(())
                     }
-                    
+
                     // We could implement this by forwarding Option<packet::Data> to worker.receive()
                     Packet::Data { .. } => Err(
                         "Client received data instead of o-ack. This implementation \
                         does not support servers without options (RFC 2347)".into()),
-                    
+
                     Packet::Error { code, msg } => Err(Box::from(format!(
                         "Client received error from server: {code}: {msg}"))),
 
                     _ => Err(Box::from(format!(
                         "Client received unexpected packet from server: {packet:#?}"))),
-                }               
+                }
             }
             Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
         }
@@ -233,7 +242,8 @@ impl Client {
         for option in options {
             match option.option {
                 OptionType::BlockSize => self.blocksize = option.value,
-                OptionType::Windowsize => self.windowsize = option.value as u16,
+                OptionType::WindowSize => self.window_size = option.value as u16,
+                OptionType::WindowWait => self.window_wait = Duration::from_millis(option.value as u64),
                 OptionType::Timeout => self.timeout = Duration::from_secs(option.value as u64),
                 OptionType::TimeoutMs => self.timeout = Duration::from_millis(option.value as u64),
                 OptionType::TransferSize => self.transfer_size = option.value,
@@ -263,7 +273,7 @@ impl Client {
                 self.clean_on_error,
                 self.blocksize,
                 self.timeout,
-                self.windowsize,
+                self.window_size,
                 self.window_wait,
                 1,
                 self.max_retries,
@@ -275,7 +285,7 @@ impl Client {
                 self.clean_on_error,
                 self.blocksize,
                 self.timeout,
-                self.windowsize,
+                self.window_size,
                 self.window_wait,
                 1,
                 self.max_retries,
