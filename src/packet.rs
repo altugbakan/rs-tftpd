@@ -267,6 +267,8 @@ pub enum ErrorCode {
     FileExists = 6,
     /// No such user error code
     NoSuchUser = 7,
+    /// Refused option error code
+    RefusedOption = 8,
 }
 
 impl ErrorCode {
@@ -281,6 +283,7 @@ impl ErrorCode {
             5 => Ok(ErrorCode::UnknownId),
             6 => Ok(ErrorCode::FileExists),
             7 => Ok(ErrorCode::NoSuchUser),
+            8 => Ok(ErrorCode::RefusedOption),
             _ => Err("Invalid error code"),
         }
     }
@@ -302,6 +305,7 @@ impl fmt::Display for ErrorCode {
             ErrorCode::UnknownId => write!(f, "Unknown ID"),
             ErrorCode::FileExists => write!(f, "File Exists"),
             ErrorCode::NoSuchUser => write!(f, "No Such User"),
+            ErrorCode::RefusedOption => write!(f, "Refused option"),
         }
     }
 }
