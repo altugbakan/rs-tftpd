@@ -2,13 +2,13 @@ use crate::{ErrorCode, Packet, Socket, Window};
 use std::thread::JoinHandle;
 use std::{
     error::Error,
+    io::ErrorKind,
     fs::{self, File},
     path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
 
-const TIMEOUT_BUFFER: Duration = Duration::from_secs(1);
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
 /// Worker `struct` is used for multithreaded file sending and receiving.
@@ -48,7 +48,7 @@ pub struct Worker<T: Socket + ?Sized> {
     clean_on_error: bool,
     blk_size: usize,
     timeout: Duration,
-    windowsize: u16,
+    window_size: u16,
     window_wait: Duration,
     repeat_amount: u8,
     max_retries: usize,
@@ -62,7 +62,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         clean_on_error: bool,
         blk_size: usize,
         timeout: Duration,
-        windowsize: u16,
+        window_size: u16,
         window_wait: Duration,
         repeat_amount: u8,
         max_retries : usize,
@@ -73,7 +73,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             clean_on_error,
             blk_size,
             timeout,
-            windowsize,
+            window_size,
             window_wait,
             repeat_amount,
             max_retries,
@@ -152,72 +152,110 @@ impl<T: Socket + ?Sized> Worker<T> {
         Ok(handle)
     }
 
-    fn send_file(self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
-        let mut block_number = 1;
-        let mut window = Window::new(self.windowsize, self.blk_size, file);
+    fn send_file(mut self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
+        let mut block_seq_win : u16 = 1;
+        let mut win_idx : u16 = 0;
+        let mut more = true;
+        let mut window = Window::new(self.window_size, self.blk_size, file);
+
+        let mut timeout_end = Instant::now();
+        let mut retry_cnt = 0;
+
+        self.socket.set_read_timeout(self.timeout)?;
 
         if check_response {
             self.check_response()?;
         }
+
         loop {
-            let filled = window.fill()?;
-
-            let mut retry_cnt = 0;
-            let mut time = Instant::now() - (self.timeout + TIMEOUT_BUFFER);
-            loop {
-                if time.elapsed() >= self.timeout {
-                    self.send_window(&window, block_number)?;
-                    time = Instant::now();
-                    if retry_cnt == self.max_retries {
-                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
-                    }
-                    retry_cnt += 1;
+            if window.is_empty() {
+                if !more {
+                    return Ok(());
                 }
+                more = window.fill()?;
+                self.socket.set_nonblocking(true)?;
+            }
 
-                // Timeout for recv is constant but we should wait until last_tx_time + timeout
+            if let Some(frame) = window.get_elements().get(win_idx as usize) {
+                let block_seq_tx = block_seq_win.wrapping_add(win_idx);
+
+                self.send_packet(&Packet::Data {
+                    block_num: block_seq_tx,
+                    data: frame.to_vec(),
+                })?;
+                win_idx += 1;
+
+                if win_idx < window.len() {
+                    if !self.window_wait.is_zero() {
+                        thread::sleep(self.window_wait);
+                    }
+                } else {
+                    self.socket.set_nonblocking(false)?;
+                    timeout_end = Instant::now() + self.timeout;
+                }
+            }
+
+            loop {
                 match self.socket.recv() {
-                    Ok(Packet::Ack(received_block_number)) => {
-                        let diff = received_block_number.wrapping_sub(block_number);
-                        if diff <= self.windowsize {
-                            block_number = received_block_number.wrapping_add(1);
-                            window.remove(diff + 1)?;
+                    Ok(Packet::Ack(block_seq_rx)) => {
+
+                        let next_seq = block_seq_rx.wrapping_add(1);
+                        let diff = next_seq.wrapping_sub(block_seq_win);
+                        if diff <= self.window_size {
+                            block_seq_win = next_seq;
+                            window.remove(diff)?;
+                            win_idx = 0;
+                            if diff != self.window_size && more {
+                                more = window.fill()?;
+                                self.socket.set_nonblocking(true)?;
+                            }
                             break;
+                        } else {
+                            // Received ack w/ unexpected seq: probably old pkt out of order
                         }
                     }
-                    Ok(Packet::Error { code, msg }) => {
-                        return Err(format!("Received error code {code}: {msg}").into());
-                    }
 
-                    Ok(_) => {
-                        println!("Received unexpected packet");
-                    }
+                    Ok(Packet::Error{code, msg}) => return Err(format!("Received error code {code}: {msg}").into()),
+
+                    Ok(_) => println!("Received unexpected packet"),
 
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
-                            if io_e.kind() == std::io::ErrorKind::ConnectionReset {
-                                println!("Cnx reset during reception {io_e:?}");
-                                // We may want to return error here to abort retries
-                            } else {
-                                println!("IO error during reception {io_e:?}");
+                            match io_e.kind() {
+                                /* On blocking sockets, Unix returns WouldBlock and Windows TimedOut */
+                                ErrorKind::WouldBlock |
+                                ErrorKind::TimedOut => if win_idx < window.len() {
+                                    // Non blocking socket
+                                    break;
+                                } else {
+                                    // Blocking socket, so timeout expired
+                                    self.socket.set_nonblocking(true)?;
+                                    win_idx = 0;
+                                },
+                                ErrorKind::ConnectionReset => println!("Cnx reset during reception {io_e:?}"),
+                                _ => println!("IO error during reception {io_e:?}"),
                             }
                         } else {
                             println!("Unkown error during reception {e:?}");
                         }
                     }
                 }
-            }
 
-            if !filled && window.is_empty() {
-                break;
+                if timeout_end < Instant::now() {
+                    if retry_cnt == self.max_retries {
+                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
+                    }
+                    retry_cnt += 1;
+                    timeout_end = Instant::now() + self.timeout;
+                    break;
+                }
             }
         }
-
-        Ok(())
     }
 
     fn receive_file(self, file: File, transfer_size: usize) -> Result<(), Box<dyn Error>> {
         let mut block_number: u16 = 0;
-        let mut window = Window::new(self.windowsize, self.blk_size, file);
+        let mut window = Window::new(self.window_size, self.blk_size, file);
 
         loop {
             let mut last = false;
@@ -231,7 +269,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     }) => {
                         if received_block_number == block_number.wrapping_add(1) {
                             block_number = received_block_number;
-                            last = data.len() < self.blk_size; // bool
+                            last = data.len() < self.blk_size;
                             window.add(data)?;
 
                             if window.is_full() || last {
@@ -261,24 +299,12 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             if last {
                 if transfer_size != 0 && transfer_size != window.file_len()? {
-                    return Err(format!("Size mismatch, megociated: {}, transferred: {}", 
+                    return Err(format!("Size mismatch, negotiated: {}, transferred: {}",
                         transfer_size, window.file_len()?).into());
                 }
                 // we should wait and listen a bit more as per RFC 1350 section 6
                 break;
             };
-        }
-
-        Ok(())
-    }
-
-    fn send_window(&self, window: &Window, mut block_num: u16) -> Result<(), Box<dyn Error>> {
-        for frame in window.get_elements() {
-            self.send_packet(&Packet::Data {
-                block_num,
-                data: frame.to_vec(),
-            })?;
-            block_num = block_num.wrapping_add(1);
         }
 
         Ok(())
