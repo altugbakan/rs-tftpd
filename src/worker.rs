@@ -35,7 +35,9 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 ///     512,
 ///     Duration::from_secs(1),
 ///     1,
+///     Duration::from_millis(1),
 ///     1,
+///     3,
 /// );
 ///
 /// worker.send(has_options).unwrap();
@@ -47,6 +49,7 @@ pub struct Worker<T: Socket + ?Sized> {
     blk_size: usize,
     timeout: Duration,
     windowsize: u16,
+    window_wait: Duration,
     repeat_amount: u8,
     max_retries: usize,
 }
@@ -60,6 +63,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         blk_size: usize,
         timeout: Duration,
         windowsize: u16,
+        window_wait: Duration,
         repeat_amount: u8,
         max_retries : usize,
     ) -> Worker<T> {
@@ -70,6 +74,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             blk_size,
             timeout,
             windowsize,
+            window_wait,
             repeat_amount,
             max_retries,
         }
@@ -215,7 +220,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         let mut window = Window::new(self.windowsize, self.blk_size, file);
 
         loop {
-            let mut size;
+            let mut last = false;
             let mut retry_cnt = 0;
 
             loop {
@@ -226,16 +231,15 @@ impl<T: Socket + ?Sized> Worker<T> {
                     }) => {
                         if received_block_number == block_number.wrapping_add(1) {
                             block_number = received_block_number;
-                            size = data.len();
+                            last = data.len() < self.blk_size; // bool
                             window.add(data)?;
 
-                            if size < self.blk_size {
+                            if window.is_full() || last {
                                 break;
                             }
-
-                            if window.is_full() {
-                                break;
-                            }
+                        } else {
+                            // Block number mismatch, send ack of last good block
+                            break;
                         }
                     }
                     Ok(Packet::Error { code, msg }) => {
@@ -255,11 +259,12 @@ impl<T: Socket + ?Sized> Worker<T> {
             window.empty()?;
             self.send_packet(&Packet::Ack(block_number))?;
 
-            if size < self.blk_size {
+            if last {
                 if transfer_size != 0 && transfer_size != window.file_len()? {
                     return Err(format!("Size mismatch, megociated: {}, transferred: {}", 
                         transfer_size, window.file_len()?).into());
                 }
+                // we should wait and listen a bit more as per RFC 1350 section 6
                 break;
             };
         }

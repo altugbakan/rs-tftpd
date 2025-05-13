@@ -105,10 +105,12 @@ impl Socket for UdpSocket {
 /// use std::net::{SocketAddr, UdpSocket};
 /// use std::str::FromStr;
 /// use tftpd::{Socket, ServerSocket, Packet};
+/// use std::time::Duration;
 ///
 /// let socket = ServerSocket::new(
 ///     UdpSocket::bind("127.0.0.1:0").unwrap(),
 ///     SocketAddr::from_str("127.0.0.1:50000").unwrap(),
+///     Duration::from_secs(3)
 /// );
 /// socket.send(&Packet::Ack(1)).unwrap();
 /// ```
@@ -224,6 +226,7 @@ mod tests {
         let socket = ServerSocket::new(
             UdpSocket::bind("127.0.0.1:0").unwrap(),
             SocketAddr::from_str("127.0.0.1:50000").unwrap(),
+            Duration::from_secs(3)
         );
 
         socket.sender.lock().unwrap().send(Packet::Ack(1)).unwrap();

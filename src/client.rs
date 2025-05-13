@@ -32,6 +32,7 @@ pub struct Client {
     timeout: Duration,
     timeout_req: Duration,
     max_retries: usize,
+    window_wait: Duration,
     mode: Mode,
     file_path: PathBuf,
     receive_directory: PathBuf,
@@ -55,6 +56,7 @@ impl Client {
             remote_address: SocketAddr::from((config.remote_ip_address, config.port)),
             blocksize: config.blocksize,
             windowsize: config.windowsize,
+            window_wait: config.window_wait,
             timeout: config.timeout,
             timeout_req: config.timeout_req,
             max_retries: config.max_retries,
@@ -262,6 +264,7 @@ impl Client {
                 self.blocksize,
                 self.timeout,
                 self.windowsize,
+                self.window_wait,
                 1,
                 self.max_retries,
             )
@@ -273,6 +276,7 @@ impl Client {
                 self.blocksize,
                 self.timeout,
                 self.windowsize,
+                self.window_wait,
                 1,
                 self.max_retries,
             )
