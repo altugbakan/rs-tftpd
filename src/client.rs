@@ -1,4 +1,5 @@
 use crate::server::{
+    Rollover,
     DEFAULT_BLOCK_SIZE,
     DEFAULT_WINDOW_SIZE,
     DEFAULT_WINDOW_WAIT,
@@ -39,6 +40,7 @@ pub struct Client {
     receive_directory: PathBuf,
     clean_on_error: bool,
     transfer_size: usize,
+    rollover: Rollover,
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -66,6 +68,7 @@ impl Client {
             receive_directory: config.receive_directory.clone(),
             clean_on_error: config.clean_on_error,
             transfer_size: 0,
+            rollover: config.rollover,
         })
     }
 
@@ -277,6 +280,7 @@ impl Client {
                 self.window_wait,
                 1,
                 self.max_retries,
+                self.rollover,
             )
         } else {
             Worker::new(
@@ -289,6 +293,7 @@ impl Client {
                 self.window_wait,
                 1,
                 self.max_retries,
+                self.rollover,
             )
         };
 

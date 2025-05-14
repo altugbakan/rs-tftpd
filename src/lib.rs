@@ -42,6 +42,7 @@ pub use packet::OptionType;
 pub use packet::Packet;
 pub use packet::TransferOption;
 pub use server::Server;
+pub use server::Rollover;
 pub use socket::ServerSocket;
 pub use socket::Socket;
 pub use window::Window;

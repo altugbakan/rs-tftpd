@@ -8,6 +8,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use crate::server::Rollover;
 
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
@@ -21,7 +22,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 ///
 /// ```rust
 /// use std::{net::{UdpSocket, SocketAddr}, path::PathBuf, str::FromStr, time::Duration};
-/// use tftpd::Worker;
+/// use tftpd::{Worker, Rollover};
 ///
 /// // Send a file, responding to a read request.
 /// let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -38,6 +39,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 ///     Duration::from_millis(1),
 ///     1,
 ///     3,
+///     Rollover::Enforce0,
 /// );
 ///
 /// worker.send(has_options).unwrap();
@@ -52,6 +54,7 @@ pub struct Worker<T: Socket + ?Sized> {
     window_wait: Duration,
     repeat_amount: u8,
     max_retries: usize,
+    rollover: Rollover,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -66,6 +69,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         window_wait: Duration,
         repeat_amount: u8,
         max_retries : usize,
+        rollover: Rollover,
     ) -> Worker<T> {
         Worker {
             socket,
@@ -77,6 +81,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             window_wait,
             repeat_amount,
             max_retries,
+            rollover,
         }
     }
 
@@ -177,7 +182,14 @@ impl<T: Socket + ?Sized> Worker<T> {
             }
 
             if let Some(frame) = window.get_elements().get(win_idx as usize) {
-                let block_seq_tx = block_seq_win.wrapping_add(win_idx);
+                let mut block_seq_tx = block_seq_win.wrapping_add(win_idx);
+                if block_seq_tx < block_seq_win {
+                    match self.rollover {
+                            Rollover::None => return Err(self.send_rollover_error()),
+                            Rollover::Enforce0 | Rollover::DontCare=> (),
+                            Rollover::Enforce1 => block_seq_tx += 1,
+                    }
+                }
 
                 self.send_packet(&Packet::Data {
                     block_num: block_seq_tx,
@@ -200,9 +212,17 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Ok(Packet::Ack(block_seq_rx)) => {
 
                         let next_seq = block_seq_rx.wrapping_add(1);
-                        let diff = next_seq.wrapping_sub(block_seq_win);
+                        let mut diff = next_seq.wrapping_sub(block_seq_win);
+                        if block_seq_rx < block_seq_win && self.rollover == Rollover::Enforce1 {
+                            diff = diff.wrapping_sub(1);
+                        }
+
                         if diff <= self.window_size {
                             block_seq_win = next_seq;
+                            if block_seq_win == 0 && self.rollover == Rollover::Enforce1 {
+                                block_seq_win = 1;
+                            }
+
                             window.remove(diff)?;
                             win_idx = 0;
                             if diff != self.window_size && more {
@@ -253,6 +273,16 @@ impl<T: Socket + ?Sized> Worker<T> {
         }
     }
 
+    fn send_rollover_error(&self) -> Box<dyn Error> {
+        self.send_packet(&Packet::Error {
+            code: ErrorCode::IllegalOperation,
+            msg: "Block counter rollover error".to_string(),
+        }).unwrap_or_else(|err| {
+            eprintln!("Error: error '{err:?}' while sending error code");
+        });
+        "Block counter rollover error".into()
+    }
+
     fn receive_file(self, file: File, transfer_size: usize) -> Result<(), Box<dyn Error>> {
         let mut block_number: u16 = 0;
         let mut window = Window::new(self.window_size, self.blk_size, file);
@@ -267,7 +297,27 @@ impl<T: Socket + ?Sized> Worker<T> {
                         block_num: received_block_number,
                         data,
                     }) => {
-                        if received_block_number == block_number.wrapping_add(1) {
+                        let mut new_block_number = block_number.wrapping_add(1);
+                        if new_block_number == 0 {
+                            match self.rollover {
+                                Rollover::None => return Err(self.send_rollover_error()),
+                                Rollover::Enforce0 => if received_block_number == 1 {
+                                    eprintln!("Warning: data packet 0 missed. Possible rollover policy mismatch.");
+                                },
+                                Rollover::Enforce1 => {
+                                    new_block_number = 1;
+                                    if received_block_number == 0 {
+                                        return Err(self.send_rollover_error());
+                                    }
+                                }
+                                Rollover::DontCare => if received_block_number == 1 {
+                                    // Possible data loss if previous packet was 0 and lost
+                                    new_block_number = 1;
+                                }
+                            }
+                        }
+
+                        if received_block_number == new_block_number {
                             block_number = received_block_number;
                             last = data.len() < self.blk_size;
                             window.add(data)?;
