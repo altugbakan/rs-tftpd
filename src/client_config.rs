@@ -1,11 +1,13 @@
 use crate::client::Mode;
-use crate::server::convert_file_path;
 use crate::server::{
+    convert_file_path,
+    Rollover,
     DEFAULT_BLOCK_SIZE,
     DEFAULT_WINDOW_SIZE,
     DEFAULT_WINDOW_WAIT,
     DEFAULT_TIMEOUT,
-    DEFAULT_MAX_RETRIES};
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_ROLLOVER};
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -53,6 +55,8 @@ pub struct ClientConfig {
     pub file_path: PathBuf,
     /// Should clean (delete) files after receiving errors. (default: true)
     pub clean_on_error: bool,
+    /// Block counter roll-over policy  (default: Enforce0)
+    pub rollover: Rollover,
 }
 
 impl Default for ClientConfig {
@@ -70,6 +74,7 @@ impl Default for ClientConfig {
             receive_directory: Default::default(),
             file_path: Default::default(),
             clean_on_error: true,
+            rollover: DEFAULT_ROLLOVER,
         }
     }
 }
@@ -160,6 +165,19 @@ impl ClientConfig {
                 "--keep-on-error" => {
                     config.clean_on_error = false;
                 }
+                "-R" | "--rollover" => {
+                    if let Some(arg_str) = args.next() {
+                        match arg_str.as_str() {
+                            "n" => config.rollover = Rollover::None,
+                            "0" => config.rollover = Rollover::Enforce0,
+                            "1" => config.rollover = Rollover::Enforce1,
+                            "x" => config.rollover = Rollover::DontCare,
+                            _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
+                        }
+                    } else {
+                        return Err("Rollover policy value missing: use n, 0, 1, x".into())
+                    }
+                }
                 "-h" | "--help" => {
                     println!("TFTP Client\n");
                     println!("Usage: tftpd client <File> [OPTIONS]\n");
@@ -172,6 +190,7 @@ impl ClientConfig {
                     println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
                     println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
                     println!("  -m, --maxretries <cnt>\t\tset the max retries count (default: 6)");
+                    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (don't care) (default: 0)");
                     println!("  -u, --upload\t\t\t\tselect upload mode, ignores previous flags");
                     println!("  -d, --download\t\t\tselect download mode, ignores previous flags");
                     println!("  -rd, --receive-directory <DIR>\tdirectory to receive files when in Download mode (default: current)");

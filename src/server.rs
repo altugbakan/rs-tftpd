@@ -8,11 +8,25 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+/// Enum used to set the block counter roll-over policy
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum Rollover {
+    /// Rollover forbidden
+    None,
+    /// Enforce 0 in Rx and Tx
+    Enforce0,
+    /// Enforce 1 in Rx and Tx
+    Enforce1,
+    /// Allow both cases in Rx and use value in Tx
+    DontCare,
+}
+
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const DEFAULT_BLOCK_SIZE: usize = 512;
 pub const DEFAULT_WINDOW_SIZE: u16 = 1;
 pub const DEFAULT_WINDOW_WAIT: Duration = Duration::from_millis(0);
 pub const DEFAULT_MAX_RETRIES: usize = 6;
+pub const DEFAULT_ROLLOVER : Rollover = Rollover::Enforce0;
 
 /// Server `struct` is used for handling incoming TFTP requests.
 ///
@@ -41,6 +55,7 @@ pub struct Server {
     largest_block_size: usize,
     clients: HashMap<SocketAddr, Sender<Packet>>,
     max_retries: usize,
+    rollover: Rollover,
 }
 
 impl Server {
@@ -59,6 +74,7 @@ impl Server {
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
             max_retries: config.max_retries,
+            rollover: config.rollover,
         };
 
         Ok(server)
@@ -197,6 +213,7 @@ impl Server {
                     worker_options.window_wait,
                     self.duplicate_packets + 1,
                     self.max_retries,
+                    self.rollover,
                 );
                 worker.send(!options.is_empty())?;
                 Ok(())
@@ -242,6 +259,7 @@ impl Server {
                 worker_options.window_wait,
                 self.duplicate_packets + 1,
                 self.max_retries,
+                self.rollover,
             );
             worker.receive(worker_options.transfer_size)?;
             Ok(())

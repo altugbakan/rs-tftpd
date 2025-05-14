@@ -3,7 +3,10 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
-use crate::server::DEFAULT_MAX_RETRIES;
+use crate::server::{
+    Rollover,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_ROLLOVER};
 
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
@@ -43,6 +46,8 @@ pub struct Config {
     pub clean_on_error: bool,
     /// Max count of retires (default: 6)
     pub max_retries: usize,
+    /// Block counter roll-over policy  (default: Enforce0)
+    pub rollover: Rollover,
 }
 
 impl Default for Config {
@@ -59,6 +64,7 @@ impl Default for Config {
             overwrite: Default::default(),
             clean_on_error: true,
             max_retries: DEFAULT_MAX_RETRIES,
+            rollover: DEFAULT_ROLLOVER,
         }
     }
 }
@@ -143,6 +149,7 @@ impl Config {
                     println!("  -s, --single-port\t\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
+                    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (dont care) (default: 0)");
                     println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
                     println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
@@ -171,7 +178,19 @@ impl Config {
                 "--keep-on-error" => {
                     config.clean_on_error = false;
                 }
-
+                "-R" | "--rollover" => {
+                    if let Some(arg_str) = args.next() {
+                        match arg_str.as_str() {
+                            "n" => config.rollover = Rollover::None,
+                            "0" => config.rollover = Rollover::Enforce0,
+                            "1" => config.rollover = Rollover::Enforce1,
+                            "x" => config.rollover = Rollover::DontCare,
+                            _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
+                        }
+                    } else {
+                        return Err("Rollover policy value missing: use n, 0, 1, x".into())
+                    }
+                }
                 invalid => return Err(format!("Invalid flag: {invalid}").into()),
             }
         }
