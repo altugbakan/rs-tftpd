@@ -179,6 +179,18 @@ impl TransferOption {
     }
 }
 
+/// Wrapper to print TransferOption slices
+pub struct OptionFmt<'a>(pub &'a [TransferOption]);
+impl fmt::Display for OptionFmt<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, e) in self.0.iter().enumerate() {
+            if i != 0 { write!(f, ", ")? }
+            write!(f, "{}:{}", e.option.as_str(), e.value)?;
+        }
+        Ok(())
+    }
+}
+
 /// OptionType `enum` represents the TFTP option types
 ///
 /// This `enum` has function implementations for conversion between

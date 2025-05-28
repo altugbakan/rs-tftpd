@@ -8,6 +8,7 @@ use crate::server::{
     DEFAULT_TIMEOUT,
     DEFAULT_MAX_RETRIES,
     DEFAULT_ROLLOVER};
+use crate::log::*;
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
@@ -98,6 +99,7 @@ impl ClientConfig {
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<ClientConfig, Box<dyn Error>> {
         let mut config = ClientConfig::default();
+        let mut verbosity : isize = 1;
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -198,6 +200,8 @@ impl ClientConfig {
                     println!("  -h, --help\t\t\t\tprint help information");
                     process::exit(0);
                 }
+                "-q" | "--quiet" => verbosity -= 1,
+                "-v" | "--verbose" => verbosity += 1,
                 "--" => {
                     while let Some(arg) = args.next() {
                         if !config.file_path.as_os_str().is_empty() {
@@ -222,6 +226,8 @@ impl ClientConfig {
         if config.file_path.as_os_str().is_empty() {
             return Err("missing filename".into());
         }
+
+        verbosity_set(verbosity);
 
         Ok(config)
     }

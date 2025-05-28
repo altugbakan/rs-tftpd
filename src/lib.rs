@@ -27,6 +27,7 @@ mod server;
 mod socket;
 mod window;
 mod worker;
+mod log;
 
 #[cfg(feature = "client")]
 pub use client::Client;
@@ -41,9 +42,11 @@ pub use packet::Opcode;
 pub use packet::OptionType;
 pub use packet::Packet;
 pub use packet::TransferOption;
+pub use packet::OptionFmt;
 pub use server::Server;
 pub use server::Rollover;
 pub use socket::ServerSocket;
 pub use socket::Socket;
 pub use window::Window;
 pub use worker::Worker;
+pub use log::verbosity;

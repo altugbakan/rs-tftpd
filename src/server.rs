@@ -1,5 +1,5 @@
 use crate::{Config, OptionType, ServerSocket, Socket, Worker};
-use crate::{ErrorCode, Packet, TransferOption};
+use crate::{ErrorCode, Packet, TransferOption, OptionFmt, log::*};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::error::Error;
@@ -96,9 +96,9 @@ impl Server {
                         mut options,
                         ..
                     } => {
-                        println!("Sending {filename} to {from}");
+                        log_info!("Received Read request from {from}: {filename}");
                         if let Err(err) = self.handle_rrq(filename.clone(), &mut options, &from) {
-                            eprintln!("Error while sending file: {err}")
+                            log_err!("Error while sending file: {err}")
                         }
                     }
                     Packet::Wrq {
@@ -117,14 +117,14 @@ impl Server {
                             )
                             .is_err()
                             {
-                                eprintln!("Could not send error packet");
+                                log_err!("Could not send error packet");
                             };
-                            eprintln!("Received write request while in read-only mode");
+                            log_warn!("Received write request while in read-only mode");
                             continue;
                         }
-                        println!("Receiving {filename} from {from}");
+                        log_info!("Received Write request from {from}: {filename}");
                         if let Err(err) = self.handle_wrq(filename, &mut options, &from) {
-                            eprintln!("Error while receiving file: {err}")
+                            log_err!("Error while receiving file: {err}")
                         }
                     }
                     _ => {
@@ -139,9 +139,9 @@ impl Server {
                             )
                             .is_err()
                             {
-                                eprintln!("Could not send error packet");
+                                log_err!("Could not send error packet");
                             };
-                            eprintln!("Received invalid request");
+                            log_warn!("Received invalid request");
                         }
                     }
                 };
@@ -159,6 +159,7 @@ impl Server {
         let file_path = &self.send_directory.join(file_path);
         match check_file_exists(file_path, &self.send_directory) {
             ErrorCode::FileNotFound => {
+                log_warn!("Cannot find requested file: {}", file_path.display());
                 Socket::send_to(
                     &self.socket,
                     &Packet::Error {
@@ -169,6 +170,7 @@ impl Server {
                 )
             }
             ErrorCode::AccessViolation => {
+                log_warn!("Cannot access requested file: {}", file_path.display());
                 Socket::send_to(
                     &self.socket,
                     &Packet::Error {
@@ -196,6 +198,8 @@ impl Server {
 
                 socket.set_read_timeout(worker_options.timeout)?;
                 socket.set_write_timeout(worker_options.timeout)?;
+
+                log_dbg!("Accepted options: {}", OptionFmt(options));
 
                 accept_request(
                     &socket,
@@ -270,7 +274,7 @@ impl Server {
                 if self.overwrite {
                     initialize_write()
                 } else {
-                    println!("File {} already exists", file_path.display());
+                    log_err!("File {} already exists", file_path.display());
                     Socket::send_to(
                         &self.socket,
                         &Packet::Error {
@@ -282,7 +286,7 @@ impl Server {
                 }
             }
             ErrorCode::AccessViolation => {
-                println!("Access violation detected for file {}", file_path.display());
+                log_err!("Access violation detected for file {}", file_path.display());
                 Socket::send_to(
                     &self.socket,
                     &Packet::Error {
