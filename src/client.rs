@@ -4,7 +4,7 @@ use crate::server::{
     DEFAULT_WINDOW_SIZE,
     DEFAULT_WINDOW_WAIT,
     DEFAULT_TIMEOUT };
-use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, Worker};
+use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, OptionFmt, Worker, log::*};
 use std::cmp::PartialEq;
 use std::error::Error;
 use std::fs;
@@ -142,6 +142,7 @@ impl Client {
 
         self.transfer_size = fs::metadata(self.file_path.clone())?.len() as usize;
 
+        log_dbg!("Sending Write request");
         Socket::send_to(
             &socket,
             &Packet::Wrq {
@@ -158,6 +159,7 @@ impl Client {
                 match packet {
                     Packet::Oack(options) => {
                         self.verify_oack(&options)?;
+                        log_dbg!("Accepted options: {}", OptionFmt(&options));
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
                         let _ = join_handle.join();
@@ -200,6 +202,7 @@ impl Client {
             .into_string()
             .unwrap_or_else(|_| "Invalid filename".to_string());
 
+        log_dbg!("Sending Read request");
         Socket::send_to(
             &socket,
             &Packet::Rrq {
@@ -217,6 +220,7 @@ impl Client {
                 match packet {
                     Packet::Oack(options) => {
                         self.verify_oack(&options)?;
+                        log_dbg!("Accepted options: {}", OptionFmt(&options));
                         Socket::send_to(&socket, &Packet::Ack(0), &from)?;
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.receive(self.transfer_size)?;

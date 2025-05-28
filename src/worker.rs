@@ -1,4 +1,6 @@
 use crate::{ErrorCode, Packet, Socket, Window};
+use crate::server::Rollover;
+use crate::log::*;
 use std::thread::JoinHandle;
 use std::{
     error::Error,
@@ -8,7 +10,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use crate::server::Rollover;
 
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
@@ -100,14 +101,14 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             match handle_send() {
                 Ok(_) => {
-                    println!(
+                    log_info!(
                         "Sent {} to {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
                     );
                 }
                 Err(err) => {
-                    eprintln!(
+                    log_err!(
                         "Error {err}, while sending {} to {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
@@ -135,20 +136,20 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             match handle_receive() {
                 Ok(_) => {
-                    println!(
-                        "Received {} from {}",
+                    log_info!(
+                        "Received {} ({} bytes) from {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
-                        remote_addr
+                        transfer_size, remote_addr
                     );
                 }
                 Err(err) => {
-                    eprintln!(
+                    log_err!(
                         "Error {err}, while receiving {} from {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
                         remote_addr
                     );
                     if clean_on_error && fs::remove_file(&file_path).is_err() {
-                        eprintln!("Error while cleaning {}", &file_path.to_str().unwrap());
+                        log_err!("Error while cleaning {}", &file_path.to_str().unwrap());
                     }
                 }
             }
@@ -231,13 +232,14 @@ impl<T: Socket + ?Sized> Worker<T> {
                             }
                             break;
                         } else {
-                            // Received ack w/ unexpected seq: probably old pkt out of order
+                            log_dbg!("  Received Ack with unexpected seq {block_seq_rx} (instead of {}/{})",
+                                block_seq_win, self.window_size);
                         }
                     }
 
                     Ok(Packet::Error{code, msg}) => return Err(format!("Received error code {code}: {msg}").into()),
 
-                    Ok(_) => println!("Received unexpected packet"),
+                    Ok(_) => log_info!("  Received unexpected packet"),
 
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
@@ -252,16 +254,17 @@ impl<T: Socket + ?Sized> Worker<T> {
                                     self.socket.set_nonblocking(true)?;
                                     win_idx = 0;
                                 },
-                                ErrorKind::ConnectionReset => println!("Cnx reset during reception {io_e:?}"),
-                                _ => println!("IO error during reception {io_e:?}"),
+                                ErrorKind::ConnectionReset => log_info!("  Cnx reset during reception {io_e:?}"),
+                                _ => log_warn!("  IO error during reception {io_e:?}"),
                             }
                         } else {
-                            println!("Unkown error during reception {e:?}");
+                            log_warn!("  Unkown error during reception {e:?}");
                         }
                     }
                 }
 
                 if timeout_end < Instant::now() {
+                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.max_retries);
                     if retry_cnt == self.max_retries {
                         return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
                     }
@@ -278,7 +281,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             code: ErrorCode::IllegalOperation,
             msg: "Block counter rollover error".to_string(),
         }).unwrap_or_else(|err| {
-            eprintln!("Error: error '{err:?}' while sending error code");
+            log_err!("Error: error '{err:?}' while sending error code");
         });
         "Block counter rollover error".into()
     }
@@ -302,7 +305,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                             match self.rollover {
                                 Rollover::None => return Err(self.send_rollover_error()),
                                 Rollover::Enforce0 => if received_block_number == 1 {
-                                    eprintln!("Warning: data packet 0 missed. Possible rollover policy mismatch.");
+                                    log_warn!("  Warning: data packet 0 missed. Possible rollover policy mismatch.");
                                 },
                                 Rollover::Enforce1 => {
                                     new_block_number = 1;
@@ -312,6 +315,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                                 }
                                 Rollover::DontCare => if received_block_number == 1 {
                                     // Possible data loss if previous packet was 0 and lost
+                                    log_dbg!("  Data packet 0 missed. Possible data loss.");
                                     new_block_number = 1;
                                 }
                             }
@@ -326,7 +330,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                                 break;
                             }
                         } else {
-                            // Block number mismatch, send ack of last good block
+                            log_dbg!("  Data packet mismatch. Received {received_block_number} instead of {new_block_number}.");
                             break;
                         }
                     }

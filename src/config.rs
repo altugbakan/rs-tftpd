@@ -7,6 +7,7 @@ use crate::server::{
     Rollover,
     DEFAULT_MAX_RETRIES,
     DEFAULT_ROLLOVER};
+use crate::log::*;
 
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
@@ -74,6 +75,7 @@ impl Config {
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<Config, Box<dyn Error>> {
         let mut config = Config::default();
+        let mut verbosity : isize = 1;
 
         args.next();
 
@@ -191,6 +193,8 @@ impl Config {
                         return Err("Rollover policy value missing: use n, 0, 1, x".into())
                     }
                 }
+                "-q" | "--quiet" => verbosity -= 1,
+                "-v" | "--verbose" => verbosity += 1,
                 invalid => return Err(format!("Invalid flag: {invalid}").into()),
             }
         }
@@ -201,6 +205,8 @@ impl Config {
         if config.send_directory.as_os_str().is_empty() {
             config.send_directory.clone_from(&config.directory);
         }
+
+        verbosity_set(verbosity);
 
         Ok(config)
     }
