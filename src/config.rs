@@ -9,6 +9,9 @@ use crate::server::{
     DEFAULT_ROLLOVER};
 use crate::log::*;
 
+#[cfg(feature = "debug_drop")]
+use crate::drop::drop_set;
+
 /// Configuration `struct` used for parsing TFTP options from user
 /// input.
 ///
@@ -195,6 +198,8 @@ impl Config {
                 }
                 "-q" | "--quiet" => verbosity -= 1,
                 "-v" | "--verbose" => verbosity += 1,
+                #[cfg(feature = "debug_drop")]
+                "-D" => drop_set(args.next())?,
                 invalid => return Err(format!("Invalid flag: {invalid}").into()),
             }
         }

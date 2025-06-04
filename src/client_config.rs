@@ -15,6 +15,9 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::Duration;
 
+#[cfg(feature = "debug_drop")]
+use crate::drop::drop_set;
+
 /// Configuration `struct` used for parsing TFTP Client options from user
 /// input.
 ///
@@ -202,6 +205,8 @@ impl ClientConfig {
                 }
                 "-q" | "--quiet" => verbosity -= 1,
                 "-v" | "--verbose" => verbosity += 1,
+                #[cfg(feature = "debug_drop")]
+                "-D" => drop_set(args.next())?,
                 "--" => {
                     while let Some(arg) = args.next() {
                         if !config.file_path.as_os_str().is_empty() {

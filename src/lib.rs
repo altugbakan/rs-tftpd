@@ -29,6 +29,9 @@ mod window;
 mod worker;
 mod log;
 
+#[cfg(feature = "debug_drop")]
+mod drop;
+
 #[cfg(feature = "client")]
 pub use client::Client;
 #[cfg(feature = "client")]

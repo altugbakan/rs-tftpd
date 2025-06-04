@@ -19,5 +19,6 @@ name = "tftpd"
 path = "src/main.rs"
 
 [features]
-integration = []
 client = []
+integration = ["debug_drop"]
+debug_drop = []

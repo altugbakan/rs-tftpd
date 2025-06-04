@@ -251,6 +251,7 @@ impl Server {
             socket.set_read_timeout(worker_options.timeout)?;
             socket.set_write_timeout(worker_options.timeout)?;
 
+            log_dbg!("Accepted options: {}", OptionFmt(options));
             accept_request(&socket, options, RequestType::Write)?;
 
             let worker = Worker::new(
