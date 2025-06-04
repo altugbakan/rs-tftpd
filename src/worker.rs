@@ -11,6 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(feature = "debug_drop")]
+use crate::drop::drop_check;
+
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 
 /// Worker `struct` is used for multithreaded file sending and receiving.
@@ -244,7 +247,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
-                                /* On blocking sockets, Unix returns WouldBlock and Windows TimedOut */
+                                /* On non-blocking sockets, Unix returns WouldBlock and Windows TimedOut */
                                 ErrorKind::WouldBlock |
                                 ErrorKind::TimedOut => if win_idx < window.len() {
                                     // Non blocking socket
@@ -365,6 +368,9 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn send_packet(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
+        #[cfg(feature = "debug_drop")]
+        if drop_check(packet) { return Ok(()) };
+
         for i in 0..self.repeat_amount {
             if i > 0 {
                 std::thread::sleep(DEFAULT_DUPLICATE_DELAY);

@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install atftp
+      - name: Install atftp and curl
         run: |
           sudo apt-get update
-          sudo apt-get install atftp
+          sudo apt-get install atftp curl
       - name: Build
         run: cargo build --features client --verbose
       - name: Run tests
