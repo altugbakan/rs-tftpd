@@ -368,7 +368,6 @@ fn test_send_curl() {
     assert!(status.success());
 }
 
-#[cfg(any())] // disable this test until error code is fixed
 #[test]
 fn test_receive_curl() {
     let filename = "receive_curl";
@@ -428,7 +427,6 @@ fn test_rollover() {
     assert_eq!(server_content, client_content);
 }
 
-#[cfg(any())] // disable this test until error code is fixed
 #[test]
 fn test_rollover_fail() {
     let filename = "rollover_fail";
