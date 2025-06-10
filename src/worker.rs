@@ -1,7 +1,6 @@
 use crate::{ErrorCode, Packet, Socket, Window};
 use crate::server::Rollover;
 use crate::log::*;
-use std::thread::JoinHandle;
 use std::{
     error::Error,
     io::ErrorKind,
@@ -91,7 +90,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     /// Sends a file to the remote [`SocketAddr`] that has sent a read request using
     /// a random port, asynchronously.
-    pub fn send(self, check_response: bool) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub fn send(self, check_response: bool) -> Result<thread::JoinHandle<bool>, Box<dyn Error>> {
         let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
 
@@ -109,6 +108,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                         &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
                     );
+                    true
                 }
                 Err(err) => {
                     log_err!(
@@ -116,6 +116,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                         &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
                     );
+                    false
                 }
             }
         });
@@ -125,7 +126,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     /// Receives a file from the remote [`SocketAddr`] (client or server) using
     /// the supplied socket, asynchronously.
-    pub fn receive(self, transfer_size: usize) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub fn receive(self, transfer_size: usize) -> Result<thread::JoinHandle<bool>, Box<dyn Error>> {
         let clean_on_error = self.clean_on_error;
         let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
@@ -144,6 +145,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                         &file_path.file_name().unwrap().to_string_lossy(),
                         transfer_size, remote_addr
                     );
+                    true
                 }
                 Err(err) => {
                     log_err!(
@@ -154,6 +156,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     if clean_on_error && fs::remove_file(&file_path).is_err() {
                         log_err!("Error while cleaning {}", &file_path.to_str().unwrap());
                     }
+                    false
                 }
             }
         });
@@ -292,11 +295,11 @@ impl<T: Socket + ?Sized> Worker<T> {
     fn receive_file(self, file: File, transfer_size: usize) -> Result<(), Box<dyn Error>> {
         let mut block_number: u16 = 0;
         let mut window = Window::new(self.window_size, self.blk_size, file);
+        let mut retry_cnt = 0;
 
-        loop {
-            let mut last = false;
-            let mut retry_cnt = 0;
+        let mut last = false;
 
+        while !last {
             loop {
                 match self.socket.recv_with_size(self.blk_size) {
                     Ok(Packet::Data {
@@ -338,14 +341,26 @@ impl<T: Socket + ?Sized> Worker<T> {
                         }
                     }
                     Ok(Packet::Error { code, msg }) => {
-                        return Err(format!("Received error code {code}: {msg}").into());
+                        return Err(format!("Received error '{code}': {msg}").into());
                     }
-                    _ => {
-                        retry_cnt += 1;
-                        if retry_cnt == self.max_retries {
-                            return Err(
-                                format!("Transfer timed out after {} tries", self.max_retries).into()
-                            );
+                    Ok(_) => log_info!("  Received unexpected packet"),
+
+                    Err(e) => {
+                        if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
+                            match io_e.kind() {
+                                ErrorKind::TimedOut => {
+                                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.max_retries);
+                                    if retry_cnt == self.max_retries {
+                                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
+                                    }
+                                    retry_cnt += 1;
+                                    break;
+                                },
+                                ErrorKind::ConnectionReset => log_info!("  Cnx reset during reception {io_e:?}"),
+                                _ => log_warn!("  IO error during reception {io_e:?}"),
+                            }
+                        } else {
+                            log_warn!("  Unkown error during reception {e:?}");
                         }
                     }
                 }
@@ -353,16 +368,13 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             window.empty()?;
             self.send_packet(&Packet::Ack(block_number))?;
-
-            if last {
-                if transfer_size != 0 && transfer_size != window.file_len()? {
-                    return Err(format!("Size mismatch, negotiated: {}, transferred: {}",
-                        transfer_size, window.file_len()?).into());
-                }
-                // we should wait and listen a bit more as per RFC 1350 section 6
-                break;
-            };
         }
+
+        if transfer_size != 0 && transfer_size != window.file_len()? {
+            return Err(format!("Size mismatch, negotiated: {}, transferred: {}",
+                transfer_size, window.file_len()?).into());
+        }
+        // we should wait and listen a bit more as per RFC 1350 section 6
 
         Ok(())
     }

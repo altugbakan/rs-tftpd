@@ -1,14 +1,18 @@
-use std::error::Error;
-use std::{env, net::SocketAddr, process};
+use std::{error::Error, env, net::SocketAddr, process, process::ExitCode};
 use tftpd::{Client, ClientConfig, Mode, log_err, log_info};
 
-fn main() {
-    client(env::args()).unwrap_or_else(|err| {
-        log_err!("{err}");
-    })
+fn main() -> ExitCode{
+    match client(env::args()) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(err) => {
+            log_err!("{err}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
-fn client<T: Iterator<Item = String>>(args: T) -> Result<(), Box<dyn Error>> {
+fn client<T: Iterator<Item = String>>(args: T) -> Result<bool, Box<dyn Error>> {
     // Parse arguments, skipping first one (exec name)
     let config = ClientConfig::new(args.skip(1)).unwrap_or_else(|err| {
         log_err!("Problem parsing arguments: {err}");

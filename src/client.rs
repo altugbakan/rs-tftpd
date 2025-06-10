@@ -73,7 +73,7 @@ impl Client {
     }
 
     /// Run the Client depending on the [`Mode`] the client is in
-    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self) -> Result<bool, Box<dyn Error>> {
 
         let socket = if self.remote_address.is_ipv4() {
             UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?
@@ -127,7 +127,7 @@ impl Client {
         options
     }
 
-    fn upload(&mut self, socket : UdpSocket) -> Result<(), Box<dyn Error>> {
+    fn upload(&mut self, socket : UdpSocket) -> Result<bool, Box<dyn Error>> {
         if self.mode != Mode::Upload {
             return Err(Box::from("Client mode is set to Download"));
         }
@@ -162,9 +162,7 @@ impl Client {
                         log_dbg!("Accepted options: {}", OptionFmt(&options));
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
-                        let _ = join_handle.join();
-
-                        Ok(())
+                        Ok(join_handle.join().unwrap())
                     }
 
                     Packet::Ack(_) => {
@@ -174,9 +172,7 @@ impl Client {
                         self.timeout = DEFAULT_TIMEOUT;
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
-                        let _ = join_handle.join();
-
-                        Ok(())
+                        Ok(join_handle.join().unwrap())
                     }
 
                     Packet::Error { code, msg } => Err(Box::from(format!(
@@ -190,7 +186,7 @@ impl Client {
         }
     }
 
-    fn download(&mut self, socket : UdpSocket) -> Result<(), Box<dyn Error>> {
+    fn download(&mut self, socket : UdpSocket) -> Result<bool, Box<dyn Error>> {
         if self.mode != Mode::Download {
             return Err(Box::from("Client mode is set to Upload"));
         }
@@ -224,9 +220,7 @@ impl Client {
                         Socket::send_to(&socket, &Packet::Ack(0), &from)?;
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.receive(self.transfer_size)?;
-                        let _ = join_handle.join();
-
-                        Ok(())
+                        Ok(join_handle.join().unwrap())
                     }
 
                     // We could implement this by forwarding Option<packet::Data> to worker.receive()
