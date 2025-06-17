@@ -1,6 +1,3 @@
-use crate::{ErrorCode, Packet, Socket, Window};
-use crate::server::Rollover;
-use crate::log::*;
 use std::{
     error::Error,
     io::ErrorKind,
@@ -9,6 +6,10 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use crate::{ErrorCode, Packet, Socket, Window};
+use crate::options::{OptionsPrivate, OptionsProtocol, Rollover};
+use crate::log::*;
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_check;
@@ -25,7 +26,7 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 ///
 /// ```rust
 /// use std::{net::{UdpSocket, SocketAddr}, path::PathBuf, str::FromStr, time::Duration};
-/// use tftpd::{Worker, Rollover};
+/// use tftpd::{Worker};
 ///
 /// // Send a file, responding to a read request.
 /// let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -35,14 +36,8 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 /// let worker = Worker::new(
 ///     Box::new(socket),
 ///     PathBuf::from_str("Cargo.toml").unwrap(),
-///     true,
-///     512,
-///     Duration::from_secs(1),
-///     1,
-///     Duration::from_millis(1),
-///     1,
-///     3,
-///     Rollover::Enforce0,
+///     Default::default(),
+///     Default::default(),
 /// );
 ///
 /// worker.send(has_options).unwrap();
@@ -50,14 +45,8 @@ const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
 pub struct Worker<T: Socket + ?Sized> {
     socket: Box<T>,
     file_path: PathBuf,
-    clean_on_error: bool,
-    blk_size: usize,
-    timeout: Duration,
-    window_size: u16,
-    window_wait: Duration,
-    repeat_amount: u8,
-    max_retries: usize,
-    rollover: Rollover,
+    opt_local: OptionsPrivate,
+    opt_common: OptionsProtocol,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -65,26 +54,14 @@ impl<T: Socket + ?Sized> Worker<T> {
     pub fn new(
         socket: Box<T>,
         file_path: PathBuf,
-        clean_on_error: bool,
-        blk_size: usize,
-        timeout: Duration,
-        window_size: u16,
-        window_wait: Duration,
-        repeat_amount: u8,
-        max_retries : usize,
-        rollover: Rollover,
+        opt_local : OptionsPrivate,
+        opt_common : OptionsProtocol,
     ) -> Worker<T> {
         Worker {
             socket,
             file_path,
-            clean_on_error,
-            blk_size,
-            timeout,
-            window_size,
-            window_wait,
-            repeat_amount,
-            max_retries,
-            rollover,
+            opt_local,
+            opt_common,
         }
     }
 
@@ -96,9 +73,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         let handle = thread::spawn(move || {
             let handle_send = || -> Result<(), Box<dyn Error>> {
-                self.send_file(File::open(&file_path)?, check_response)?;
-
-                Ok(())
+                self.send_file(File::open(&file_path)?, check_response)
             };
 
             match handle_send() {
@@ -112,7 +87,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
                 Err(err) => {
                     log_err!(
-                        "Error {err}, while sending {} to {}",
+                        "Error \"{err}\", while sending {} to {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
                         &remote_addr
                     );
@@ -126,30 +101,36 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     /// Receives a file from the remote [`SocketAddr`] (client or server) using
     /// the supplied socket, asynchronously.
-    pub fn receive(self, transfer_size: usize) -> Result<thread::JoinHandle<bool>, Box<dyn Error>> {
-        let clean_on_error = self.clean_on_error;
+    pub fn receive(self) -> Result<thread::JoinHandle<bool>, Box<dyn Error>> {
+        let clean_on_error = self.opt_local.clean_on_error;
         let file_path = self.file_path.clone();
         let remote_addr = self.socket.remote_addr().unwrap();
+        let opt_tsize = self.opt_common.transfer_size;
 
         let handle = thread::spawn(move || {
-            let handle_receive = || -> Result<(), Box<dyn Error>> {
-                self.receive_file(File::create(&file_path)?, transfer_size)?;
-
-                Ok(())
+            let handle_receive = || -> Result<u64, Box<dyn Error>> {
+                self.receive_file(File::create(&file_path)?)
             };
 
             match handle_receive() {
-                Ok(_) => {
+                Ok(size) => {
+                    if let Some(tsize) = opt_tsize {
+                        if tsize != size {
+                            log_err!("Size mismatch, negotiated: {tsize}, transferred: {size}");
+                            return false;
+                        }
+                    }
+
                     log_info!(
                         "Received {} ({} bytes) from {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
-                        transfer_size, remote_addr
+                        size, remote_addr
                     );
                     true
                 }
                 Err(err) => {
                     log_err!(
-                        "Error {err}, while receiving {} from {}",
+                        "Error \"{err}\", while receiving {} from {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
                         remote_addr
                     );
@@ -168,12 +149,12 @@ impl<T: Socket + ?Sized> Worker<T> {
         let mut block_seq_win : u16 = 1;
         let mut win_idx : u16 = 0;
         let mut more = true;
-        let mut window = Window::new(self.window_size, self.blk_size, file);
+        let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
 
         let mut timeout_end = Instant::now();
         let mut retry_cnt = 0;
 
-        self.socket.set_read_timeout(self.timeout)?;
+        self.socket.set_read_timeout(self.opt_common.timeout)?;
 
         if check_response {
             self.check_response()?;
@@ -191,7 +172,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             if let Some(frame) = window.get_elements().get(win_idx as usize) {
                 let mut block_seq_tx = block_seq_win.wrapping_add(win_idx);
                 if block_seq_tx < block_seq_win {
-                    match self.rollover {
+                    match self.opt_local.rollover {
                             Rollover::None => return Err(self.send_rollover_error()),
                             Rollover::Enforce0 | Rollover::DontCare=> (),
                             Rollover::Enforce1 => block_seq_tx += 1,
@@ -205,12 +186,12 @@ impl<T: Socket + ?Sized> Worker<T> {
                 win_idx += 1;
 
                 if win_idx < window.len() {
-                    if !self.window_wait.is_zero() {
-                        thread::sleep(self.window_wait);
+                    if !self.opt_common.window_wait.is_zero() {
+                        thread::sleep(self.opt_common.window_wait);
                     }
                 } else {
                     self.socket.set_nonblocking(false)?;
-                    timeout_end = Instant::now() + self.timeout;
+                    timeout_end = Instant::now() + self.opt_common.timeout;
                 }
             }
 
@@ -220,26 +201,26 @@ impl<T: Socket + ?Sized> Worker<T> {
 
                         let next_seq = block_seq_rx.wrapping_add(1);
                         let mut diff = next_seq.wrapping_sub(block_seq_win);
-                        if block_seq_rx < block_seq_win && self.rollover == Rollover::Enforce1 {
+                        if block_seq_rx < block_seq_win && self.opt_local.rollover == Rollover::Enforce1 {
                             diff = diff.wrapping_sub(1);
                         }
 
-                        if diff <= self.window_size {
+                        if diff <= self.opt_common.window_size {
                             block_seq_win = next_seq;
-                            if block_seq_win == 0 && self.rollover == Rollover::Enforce1 {
+                            if block_seq_win == 0 && self.opt_local.rollover == Rollover::Enforce1 {
                                 block_seq_win = 1;
                             }
 
                             window.remove(diff)?;
                             win_idx = 0;
-                            if diff != self.window_size && more {
+                            if diff != self.opt_common.window_size && more {
                                 more = window.fill()?;
                                 self.socket.set_nonblocking(true)?;
                             }
                             break;
                         } else {
                             log_dbg!("  Received Ack with unexpected seq {block_seq_rx} (instead of {}/{})",
-                                block_seq_win, self.window_size);
+                                block_seq_win, self.opt_common.window_size);
                         }
                     }
 
@@ -270,12 +251,12 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
 
                 if timeout_end < Instant::now() {
-                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.max_retries);
-                    if retry_cnt == self.max_retries {
-                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
+                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
+                    if retry_cnt == self.opt_local.max_retries {
+                        return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
                     }
                     retry_cnt += 1;
-                    timeout_end = Instant::now() + self.timeout;
+                    timeout_end = Instant::now() + self.opt_common.timeout;
                     break;
                 }
             }
@@ -292,23 +273,23 @@ impl<T: Socket + ?Sized> Worker<T> {
         "Block counter rollover error".into()
     }
 
-    fn receive_file(self, file: File, transfer_size: usize) -> Result<(), Box<dyn Error>> {
+    fn receive_file(self, file: File) -> Result<u64, Box<dyn Error>> {
         let mut block_number: u16 = 0;
-        let mut window = Window::new(self.window_size, self.blk_size, file);
+        let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
         let mut retry_cnt = 0;
 
         let mut last = false;
 
         while !last {
             loop {
-                match self.socket.recv_with_size(self.blk_size) {
+                match self.socket.recv_with_size(self.opt_common.block_size as usize) {
                     Ok(Packet::Data {
                         block_num: received_block_number,
                         data,
                     }) => {
                         let mut new_block_number = block_number.wrapping_add(1);
                         if new_block_number == 0 {
-                            match self.rollover {
+                            match self.opt_local.rollover {
                                 Rollover::None => return Err(self.send_rollover_error()),
                                 Rollover::Enforce0 => if received_block_number == 1 {
                                     log_warn!("  Warning: data packet 0 missed. Possible rollover policy mismatch.");
@@ -329,7 +310,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
                         if received_block_number == new_block_number {
                             block_number = received_block_number;
-                            last = data.len() < self.blk_size;
+                            last = data.len() < self.opt_common.block_size as usize;
                             window.add(data)?;
 
                             if window.is_full() || last {
@@ -349,9 +330,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
                                 ErrorKind::TimedOut => {
-                                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.max_retries);
-                                    if retry_cnt == self.max_retries {
-                                        return Err(format!("Transfer timed out after {} tries", self.max_retries).into());
+                                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
+                                    if retry_cnt == self.opt_local.max_retries {
+                                        return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
                                     }
                                     retry_cnt += 1;
                                     break;
@@ -370,20 +351,16 @@ impl<T: Socket + ?Sized> Worker<T> {
             self.send_packet(&Packet::Ack(block_number))?;
         }
 
-        if transfer_size != 0 && transfer_size != window.file_len()? {
-            return Err(format!("Size mismatch, negotiated: {}, transferred: {}",
-                transfer_size, window.file_len()?).into());
-        }
         // we should wait and listen a bit more as per RFC 1350 section 6
 
-        Ok(())
+        window.file_len()
     }
 
     fn send_packet(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "debug_drop")]
         if drop_check(packet) { return Ok(()) };
 
-        for i in 0..self.repeat_amount {
+        for i in 0..self.opt_local.repeat_count {
             if i > 0 {
                 std::thread::sleep(DEFAULT_DUPLICATE_DELAY);
             }

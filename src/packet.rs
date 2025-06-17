@@ -1,5 +1,8 @@
-use crate::Convert;
-use std::{error::Error, fmt, str::FromStr};
+use std::error::Error;
+use std::str::FromStr;
+use std::fmt;
+
+use crate::{Convert, TransferOption, OptionType};
 
 /// Packet `enum` represents the valid TFTP packet types.
 ///
@@ -140,114 +143,6 @@ impl Opcode {
     /// Converts a [`u16`] to a [`u8`] array with 2 elements.
     pub const fn as_bytes(self) -> [u8; 2] {
         (self as u16).to_be_bytes()
-    }
-}
-
-/// TransferOption `struct` represents the TFTP transfer options.
-///
-/// This `struct` has a function implementation for converting [`TransferOption`]s
-/// to [`Vec<u8>`]s.
-///
-/// # Example
-///
-/// ```rust
-/// use tftpd::{TransferOption, OptionType};
-///
-/// assert_eq!(TransferOption { option: OptionType::BlockSize, value: 1432 }.as_bytes(), vec![
-///     0x62, 0x6C, 0x6B, 0x73, 0x69, 0x7A, 0x65, 0x00, 0x31, 0x34, 0x33, 0x32,
-///     0x00,
-/// ]);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TransferOption {
-    /// Type of the option
-    pub option: OptionType,
-    /// Value of the option
-    pub value: usize,
-}
-
-impl TransferOption {
-    /// Converts a [`TransferOption`] to a [`Vec<u8>`].
-    pub fn as_bytes(&self) -> Vec<u8> {
-        [
-            self.option.as_str().as_bytes(),
-            &[0x00],
-            self.value.to_string().as_bytes(),
-            &[0x00],
-        ]
-        .concat()
-    }
-}
-
-/// Wrapper to print TransferOption slices
-pub struct OptionFmt<'a>(pub &'a [TransferOption]);
-impl fmt::Display for OptionFmt<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (i, e) in self.0.iter().enumerate() {
-            if i != 0 { write!(f, ", ")? }
-            write!(f, "{}:{}", e.option.as_str(), e.value)?;
-        }
-        Ok(())
-    }
-}
-
-/// OptionType `enum` represents the TFTP option types
-///
-/// This `enum` has function implementations for conversion between
-/// [`OptionType`]s and [`str`]s.
-///
-/// # Example
-///
-/// ```rust
-/// use tftpd::OptionType;
-///
-/// assert_eq!(OptionType::BlockSize, "blksize".parse().unwrap());
-/// assert_eq!("tsize", OptionType::TransferSize.as_str());
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OptionType {
-    /// Block Size option type
-    BlockSize,
-    /// Transfer Size option type
-    TransferSize,
-    /// Timeout option type
-    Timeout,
-    /// Timeout in ms option type
-    TimeoutMs,
-    /// Windowsize option type
-    WindowSize,
-    /// Windowwait option type
-    WindowWait,
-}
-
-impl OptionType {
-    /// Converts an [`OptionType`] to a [`str`].
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            OptionType::BlockSize => "blksize",
-            OptionType::TransferSize => "tsize",
-            OptionType::Timeout => "timeout",
-            OptionType::TimeoutMs => "timeoutms",
-            OptionType::WindowSize => "windowsize",
-            OptionType::WindowWait => "windowwait",
-        }
-    }
-}
-
-impl FromStr for OptionType {
-    type Err = &'static str;
-
-    /// Converts a [`str`] to an [`OptionType`].
-    fn from_str(value: &str) -> Result<Self, &'static str> {
-        match value {
-            "blksize" => Ok(OptionType::BlockSize),
-            "tsize" => Ok(OptionType::TransferSize),
-            "timeout" => Ok(OptionType::Timeout),
-            "timeoutms" => Ok(OptionType::TimeoutMs),
-            "windowsize" => Ok(OptionType::WindowSize),
-            "windowwait" => Ok(OptionType::WindowWait),
-            _ => Err("Invalid option type"),
-        }
     }
 }
 

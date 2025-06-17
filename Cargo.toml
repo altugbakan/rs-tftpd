@@ -20,5 +20,5 @@ path = "src/main.rs"
 
 [features]
 client = []
-integration = ["debug_drop"]
+integration = ["debug_drop", "client"]
 debug_drop = []

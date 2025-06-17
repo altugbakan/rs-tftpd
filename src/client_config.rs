@@ -1,19 +1,14 @@
-use crate::client::Mode;
-use crate::server::{
-    convert_file_path,
-    Rollover,
-    DEFAULT_BLOCK_SIZE,
-    DEFAULT_WINDOW_SIZE,
-    DEFAULT_WINDOW_WAIT,
-    DEFAULT_TIMEOUT,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_ROLLOVER};
-use crate::log::*;
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::Duration;
+
+use crate::client::Mode;
+use crate::server::convert_file_path;
+use crate::config;
+use crate::options::{DEFAULT_TIMEOUT, OptionsProtocol, OptionsPrivate};
+use crate::log::*;
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_set;
@@ -39,28 +34,18 @@ pub struct ClientConfig {
     pub remote_ip_address: IpAddr,
     /// Local Port number of the TFTP Client. (default: 69)
     pub port: u16,
-    /// Blocksize to use during transfer. (default: 512)
-    pub blocksize: usize,
-    /// Windowsize to use during transfer. (default: 1)
-    pub window_size: u16,
-    /// Inter packets wait delay in windows (default: 10ms)
-    pub window_wait: Duration,
-    /// Timeout to use during transfer. (default: 5s)
-    pub timeout: Duration,
     /// Timeout to use after request. (default: 5s)
     pub timeout_req: Duration,
-    /// Max count of retires (default: 6)
-    pub max_retries: usize,
     /// Upload or Download a file. (default: Download)
     pub mode: Mode,
     /// Download directory of the TFTP Client. (default: current working directory)
     pub receive_directory: PathBuf,
     /// File to Upload or Download.
     pub file_path: PathBuf,
-    /// Should clean (delete) files after receiving errors. (default: true)
-    pub clean_on_error: bool,
-    /// Block counter roll-over policy  (default: Enforce0)
-    pub rollover: Rollover,
+    /// Local options for client
+    pub opt_local: OptionsPrivate,
+    /// Common options for client
+    pub opt_common: OptionsProtocol,
 }
 
 impl Default for ClientConfig {
@@ -68,27 +53,23 @@ impl Default for ClientConfig {
         Self {
             remote_ip_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port: 69,
-            blocksize: DEFAULT_BLOCK_SIZE,
-            window_size: DEFAULT_WINDOW_SIZE,
-            window_wait: DEFAULT_WINDOW_WAIT,
-            timeout: DEFAULT_TIMEOUT,
             timeout_req: DEFAULT_TIMEOUT,
-            max_retries: DEFAULT_MAX_RETRIES,
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
-            clean_on_error: true,
-            rollover: DEFAULT_ROLLOVER,
+            opt_local: Default::default(),
+            opt_common: Default::default(),
         }
     }
 }
-
 
 fn parse_duration<T : Iterator<Item = String>>(args : &mut T) -> Result<Duration, Box<dyn Error>> {
     if let Some(dur_str) = args.next() {
         let dur = Duration::from_secs_f32(dur_str.parse::<f32>()?);
         if dur < Duration::from_secs_f32(0.001) {
             Err("duration cannot be shorter than 1 ms".into())
+        } else if dur > Duration::from_secs(255) {
+            Err("duration cannot be greater than 255 s".into())
         } else {
             Ok(dur)
         }
@@ -123,33 +104,26 @@ impl ClientConfig {
                 }
                 "-b" | "--blocksize" => {
                     if let Some(blocksize_str) = args.next() {
-                        config.blocksize = blocksize_str.parse::<usize>()?;
+                        config.opt_common.block_size = blocksize_str.parse::<u16>()?;
                     } else {
                         return Err("Missing blocksize after flag".into());
                     }
                 }
                 "-w" | "--windowsize" => {
                     if let Some(windowsize_str) = args.next() {
-                        config.window_size = windowsize_str.parse::<u16>()?;
+                        config.opt_common.window_size = windowsize_str.parse::<u16>()?;
                     } else {
                         return Err("Missing windowsize after flag".into());
                     }
                 }
                 "-W" | "--windowwait" => {
-                    config.window_wait = parse_duration(&mut args)?;
+                    config.opt_common.window_wait = parse_duration(&mut args)?;
                 }
                 "-t" | "--timeout" => {
-                    config.timeout = parse_duration(&mut args)?;
+                    config.opt_common.timeout = parse_duration(&mut args)?;
                 }
                 "-T" | "--timeout-req" => {
                     config.timeout_req = parse_duration(&mut args)?;
-                }
-                "-m" | "--maxretries" => {
-                    if let Some(retries_str) = args.next() {
-                        config.max_retries = retries_str.parse::<usize>()?;
-                    } else {
-                        return Err("Missing max retries after flag".into());
-                    }
                 }
                 "-rd" | "--receive-directory" => {
                     if let Some(dir_str) = args.next() {
@@ -167,22 +141,6 @@ impl ClientConfig {
                 "-d" | "--download" => {
                     config.mode = Mode::Download;
                 }
-                "--keep-on-error" => {
-                    config.clean_on_error = false;
-                }
-                "-R" | "--rollover" => {
-                    if let Some(arg_str) = args.next() {
-                        match arg_str.as_str() {
-                            "n" => config.rollover = Rollover::None,
-                            "0" => config.rollover = Rollover::Enforce0,
-                            "1" => config.rollover = Rollover::Enforce1,
-                            "x" => config.rollover = Rollover::DontCare,
-                            _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
-                        }
-                    } else {
-                        return Err("Rollover policy value missing: use n, 0, 1, x".into())
-                    }
-                }
                 "-h" | "--help" => {
                     println!("TFTP Client\n");
                     println!("Usage: tftpd client <File> [OPTIONS]\n");
@@ -194,12 +152,10 @@ impl ClientConfig {
                     println!("  -W, --windowwait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0.01)");
                     println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
                     println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
-                    println!("  -m, --maxretries <cnt>\t\tset the max retries count (default: 6)");
-                    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (don't care) (default: 0)");
                     println!("  -u, --upload\t\t\t\tselect upload mode, ignores previous flags");
                     println!("  -d, --download\t\t\tselect download mode, ignores previous flags");
                     println!("  -rd, --receive-directory <DIR>\tdirectory to receive files when in Download mode (default: current)");
-                    println!("  --keep-on-error\t\t\tprevent client from deleting files after receiving errors");
+                    config::print_opt_local_help();
                     println!("  -h, --help\t\t\t\tprint help information");
                     process::exit(0);
                 }
@@ -215,15 +171,15 @@ impl ClientConfig {
                         config.file_path = convert_file_path(arg.as_str());
                     }
                 }
-                filename => {
+                arg => if !config::parse_local_args(arg, &mut args, &mut config.opt_local)? {
                     if !config.file_path.as_os_str().is_empty() {
                         return Err("too many arguments".into());
                     }
 
-                    if filename.starts_with('-') {
-                        return Err(format!("unkwon flag {filename} (or use '--' to force into filename)").into());
+                    if arg.starts_with('-') {
+                        return Err(format!("unkwon flag {arg} (or use '--' to force into filename)").into());
                     }
-                    config.file_path = convert_file_path(filename);
+                    config.file_path = convert_file_path(arg);
                 }
             }
         }
@@ -274,12 +230,12 @@ mod tests {
         assert_eq!(config.port, 1234);
         assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.file_path, PathBuf::from("test.file"));
-        assert_eq!(config.window_size, 2);
-        assert_eq!(config.window_wait, Duration::from_millis(20));
-        assert_eq!(config.blocksize, 1024);
+        assert_eq!(config.opt_common.window_size, 2);
+        assert_eq!(config.opt_common.window_wait, Duration::from_millis(20));
+        assert_eq!(config.opt_common.block_size, 1024);
         assert_eq!(config.mode, Mode::Upload);
-        assert_eq!(config.timeout, Duration::from_secs(4));
-        assert!(!config.clean_on_error);
+        assert_eq!(config.opt_common.timeout, Duration::from_secs(4));
+        assert!(!config.opt_local.clean_on_error);
     }
 
     #[test]
@@ -293,7 +249,7 @@ mod tests {
 
         assert_eq!(config.port, 2000);
         assert_eq!(config.file_path, PathBuf::from("test.file"));
-        assert_eq!(config.blocksize, 2048);
+        assert_eq!(config.opt_common.block_size, 2048);
         assert_eq!(config.mode, Mode::Download);
     }
 

@@ -1,16 +1,12 @@
-use crate::server::{
-    Rollover,
-    DEFAULT_BLOCK_SIZE,
-    DEFAULT_WINDOW_SIZE,
-    DEFAULT_WINDOW_WAIT,
-    DEFAULT_TIMEOUT };
-use crate::{ClientConfig, OptionType, Packet, Socket, TransferOption, OptionFmt, Worker, log::*};
 use std::cmp::PartialEq;
 use std::error::Error;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::time::Duration;
+
+use crate::{ClientConfig, Packet, Socket, Worker, log::*};
+use crate::options::{OptionsProtocol, OptionsPrivate, OptionFmt};
 
 /// Client `struct` is used for client sided TFTP requests.
 ///
@@ -29,18 +25,12 @@ use std::time::Duration;
 /// ```
 pub struct Client {
     remote_address: SocketAddr,
-    blocksize: usize,
-    window_size: u16,
-    window_wait: Duration,
-    timeout: Duration,
     timeout_req: Duration,
-    max_retries: usize,
     mode: Mode,
     file_path: PathBuf,
     receive_directory: PathBuf,
-    clean_on_error: bool,
-    transfer_size: usize,
-    rollover: Rollover,
+    opt_local: OptionsPrivate,
+    opt_common: OptionsProtocol,
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -57,18 +47,12 @@ impl Client {
     pub fn new(config: &ClientConfig) -> Result<Client, Box<dyn Error>> {
         Ok(Client {
             remote_address: SocketAddr::from((config.remote_ip_address, config.port)),
-            blocksize: config.blocksize,
-            window_size: config.window_size,
-            window_wait: config.window_wait,
-            timeout: config.timeout,
             timeout_req: config.timeout_req,
-            max_retries: config.max_retries,
             mode: config.mode,
             file_path: config.file_path.clone(),
             receive_directory: config.receive_directory.clone(),
-            clean_on_error: config.clean_on_error,
-            transfer_size: 0,
-            rollover: config.rollover,
+            opt_local: config.opt_local.clone(),
+            opt_common: config.opt_common.clone(),
         })
     }
 
@@ -89,44 +73,6 @@ impl Client {
         }
     }
 
-    fn prepare_options(&self) -> Vec<TransferOption> {
-        let mut options = vec![
-            TransferOption {
-                option: OptionType::BlockSize,
-                value: self.blocksize,
-            },
-            TransferOption {
-                option: OptionType::TransferSize,
-                value: self.transfer_size,
-            },
-            TransferOption {
-                option: OptionType::WindowSize,
-                value: self.window_size as usize,
-            },
-        ];
-
-        if self.window_wait.as_millis() != 0 {
-            options.push(TransferOption {
-                option: OptionType::WindowWait,
-                value: self.window_wait.as_millis() as usize,
-            });
-        }
-
-        options.push(if self.timeout.subsec_millis() == 0 {
-            TransferOption {
-                option: OptionType::Timeout,
-                value: self.timeout.as_secs() as usize,
-            }
-        } else {
-            TransferOption {
-                option: OptionType::TimeoutMs,
-                value: self.timeout.as_millis() as usize,
-            }
-        });
-
-        options
-    }
-
     fn upload(&mut self, socket : UdpSocket) -> Result<bool, Box<dyn Error>> {
         if self.mode != Mode::Upload {
             return Err(Box::from("Client mode is set to Download"));
@@ -140,15 +86,15 @@ impl Client {
             .ok_or("Filename is not valid UTF-8")?
             .to_owned();
 
-        self.transfer_size = fs::metadata(self.file_path.clone())?.len() as usize;
+        self.opt_common.transfer_size = Some(fs::metadata(self.file_path.clone())?.len());
 
-        log_dbg!("Sending Write request");
+        log_dbg!("  Sending Write request");
         Socket::send_to(
             &socket,
             &Packet::Wrq {
                 filename,
                 mode: "octet".into(),
-                options : self.prepare_options(),
+                options : self.opt_common.prepare(),
             },
             &self.remote_address,
         )?;
@@ -158,18 +104,15 @@ impl Client {
                 socket.connect(from)?;
                 match packet {
                     Packet::Oack(options) => {
-                        self.verify_oack(&options)?;
-                        log_dbg!("Accepted options: {}", OptionFmt(&options));
+                        self.opt_common.apply(&options)?;
+                        log_dbg!("  Accepted options: {}", OptionFmt(&options));
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
                         Ok(join_handle.join().unwrap())
                     }
 
                     Packet::Ack(_) => {
-                        self.blocksize = DEFAULT_BLOCK_SIZE;
-                        self.window_size = DEFAULT_WINDOW_SIZE;
-                        self.window_wait = DEFAULT_WINDOW_WAIT;
-                        self.timeout = DEFAULT_TIMEOUT;
+                        self.opt_common = Default::default();
                         let worker = self.configure_worker(socket)?;
                         let join_handle = worker.send(false)?;
                         Ok(join_handle.join().unwrap())
@@ -198,13 +141,13 @@ impl Client {
             .into_string()
             .unwrap_or_else(|_| "Invalid filename".to_string());
 
-        log_dbg!("Sending Read request");
+        log_dbg!("  Sending Read request");
         Socket::send_to(
             &socket,
             &Packet::Rrq {
                 filename,
                 mode: "octet".into(),
-                options : self.prepare_options(),
+                options : self.opt_common.prepare(),
             },
             &self.remote_address,
         )?;
@@ -215,11 +158,11 @@ impl Client {
                 socket.connect(from)?;
                 match packet {
                     Packet::Oack(options) => {
-                        self.verify_oack(&options)?;
-                        log_dbg!("Accepted options: {}", OptionFmt(&options));
+                        self.opt_common.apply(&options)?;
+                        log_dbg!("  Accepted options: {}", OptionFmt(&options));
                         Socket::send_to(&socket, &Packet::Ack(0), &from)?;
                         let worker = self.configure_worker(socket)?;
-                        let join_handle = worker.receive(self.transfer_size)?;
+                        let join_handle = worker.receive()?;
                         Ok(join_handle.join().unwrap())
                     }
 
@@ -239,26 +182,11 @@ impl Client {
         }
     }
 
-    fn verify_oack(&mut self, options: &Vec<TransferOption>) -> Result<(), Box<dyn Error>> {
-        for option in options {
-            match option.option {
-                OptionType::BlockSize => self.blocksize = option.value,
-                OptionType::WindowSize => self.window_size = option.value as u16,
-                OptionType::WindowWait => self.window_wait = Duration::from_millis(option.value as u64),
-                OptionType::Timeout => self.timeout = Duration::from_secs(option.value as u64),
-                OptionType::TimeoutMs => self.timeout = Duration::from_millis(option.value as u64),
-                OptionType::TransferSize => self.transfer_size = option.value,
-            }
-        }
-
-        Ok(())
-    }
-
     fn configure_worker(&self, socket: UdpSocket) -> Result<Worker<dyn Socket>, Box<dyn Error>> {
         let mut socket: Box<dyn Socket> = Box::new(socket);
 
-        socket.set_read_timeout(self.timeout)?;
-        socket.set_write_timeout(self.timeout)?;
+        socket.set_read_timeout(self.opt_common.timeout)?;
+        socket.set_write_timeout(self.opt_common.timeout)?;
 
         let worker = if self.mode == Mode::Download {
             let mut file = self.receive_directory.clone();
@@ -271,27 +199,15 @@ impl Client {
             Worker::new(
                 socket,
                 file,
-                self.clean_on_error,
-                self.blocksize,
-                self.timeout,
-                self.window_size,
-                self.window_wait,
-                1,
-                self.max_retries,
-                self.rollover,
+                self.opt_local.clone(),
+                self.opt_common.clone(),
             )
         } else {
             Worker::new(
                 socket,
                 self.file_path.clone(),
-                self.clean_on_error,
-                self.blocksize,
-                self.timeout,
-                self.window_size,
-                self.window_wait,
-                1,
-                self.max_retries,
-                self.rollover,
+                self.opt_local.clone(),
+                self.opt_common.clone(),
             )
         };
 

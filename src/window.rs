@@ -26,13 +26,13 @@ use std::{
 pub struct Window {
     elements: VecDeque<Vec<u8>>,
     size: u16,
-    chunk_size: usize,
+    chunk_size: u16,
     file: File,
 }
 
 impl Window {
     /// Creates a new `Window` with the supplied size and chunk size.
-    pub fn new(size: u16, chunk_size: usize, file: File) -> Window {
+    pub fn new(size: u16, chunk_size: u16, file: File) -> Window {
         Window {
             elements: VecDeque::new(),
             size,
@@ -45,10 +45,10 @@ impl Window {
     /// Returns `true` if the `Window` is full.
     pub fn fill(&mut self) -> Result<bool, Box<dyn Error>> {
         for _ in self.len()..self.size {
-            let mut chunk = vec![0; self.chunk_size];
+            let mut chunk = vec![0; self.chunk_size as usize];
             let size = self.file.read(&mut chunk)?;
 
-            if size != self.chunk_size {
+            if size != self.chunk_size as usize {
                 chunk.truncate(size);
                 self.elements.push_back(chunk);
                 return Ok(false);
@@ -114,8 +114,8 @@ impl Window {
     }
 
     /// Returns the length of the file
-    pub fn file_len(&self) -> Result<usize, Box<dyn Error>> {
-        Ok(self.file.metadata()?.len() as usize)
+    pub fn file_len(&self) -> Result<u64, Box<dyn Error>> {
+        Ok(self.file.metadata()?.len())
     }
 }
 
