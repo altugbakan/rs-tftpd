@@ -1,9 +1,10 @@
 #![cfg(feature = "integration")]
 
 use std::fs::{self, create_dir_all, remove_dir_all};
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::io::Read;
 
 const SERVER_DIR: &str = "target/integration/server";
 const CLIENT_DIR: &str = "target/integration/client";
@@ -16,6 +17,15 @@ impl CommandRunner {
     fn new(program: &str, args: &[&str]) -> Self {
         let command = Command::new(program)
             .args(args)
+            .spawn()
+            .expect("error starting process");
+        Self { process: command }
+    }
+
+    fn new_piped(program: &str, args: &[&str]) -> Self {
+        let command = Command::new(program)
+            .args(args)
+            .stderr(Stdio::piped())
             .spawn()
             .expect("error starting process");
         Self { process: command }
@@ -410,7 +420,8 @@ fn test_rollover() {
             "-d",
             "-rd", CLIENT_DIR,
             "-R", "0",
-            "-b", "1",
+            "-b", "1", // speed up test and ensure rollover
+            "-w", "32", // speed up test 
             "-v", "-v", 
         ],
     );
@@ -437,22 +448,67 @@ fn test_rollover_fail() {
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", ]);
     thread::sleep(Duration::from_secs(1));
 
-    let mut client = CommandRunner::new(
+    let mut client = CommandRunner::new_piped(
         "target/debug/tftpc",
         &[
             filename,
             "-p", port,
             "-d",
             "-rd", CLIENT_DIR,
-            "-R", "1",
-            "-b", "1",
+            "-R", "1", // different from server, must fail
+            "-b", "1", // speed up test and ensure rollover
+            "-w", "32", // speed up test
+            "-v", "-v",
         ],
     );
 
+    let mut stderr = client.process.stderr.take().unwrap();
     let status = client.wait();
     
-    println!("{status:?}");
+    let mut buffer = String::new();
+    let _ = stderr.read_to_string(&mut buffer);
+    assert!(buffer.contains("Block counter rollover error"));
     
+    assert!(!status.success());
+}
+
+// This test creates a file corruption by dropping "data 0" packet
+// (the first one after a rollover) and ensuring transfer get terminated,
+// then waits for the tsize check to detect the size mismatch
+#[test]
+fn test_tsize() {
+    let filename = "tsize";
+    let port = "6986";
+    create_folders();
+    create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
+
+    let _server = CommandRunner::new("target/debug/tftpd", 
+        &["-p", port, "-d", SERVER_DIR,
+            "-R", "0", "-D", "0", // rollover 0 but drop data 0!
+             "-v", "-v", 
+        ]);
+    thread::sleep(Duration::from_secs(1));
+
+    let mut client = CommandRunner::new_piped(
+        "target/debug/tftpc",
+        &[
+            filename,
+            "-p", port,
+            "-d",
+            "-rd", CLIENT_DIR,
+            "-R", "x",  // will not fail if data 0 is missing
+            "-b", "1",  // speed up test and ensure rollover
+            "-w", "30", // to ensure no ack on data 0
+            "-v", "-v",
+        ],
+    );
+
+    let mut stderr = client.process.stderr.take().unwrap();
+    let status = client.wait();
+    
+    let mut buffer = String::new();
+    let _ = stderr.read_to_string(&mut buffer);
+    assert!(buffer.contains("Size mismatch"));
     assert!(!status.success());
 }
 

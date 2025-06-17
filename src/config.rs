@@ -3,10 +3,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
-use crate::server::{
-    Rollover,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_ROLLOVER};
+use crate::options::{Rollover, OptionsPrivate};
 use crate::log::*;
 
 #[cfg(feature = "debug_drop")]
@@ -42,16 +39,10 @@ pub struct Config {
     pub single_port: bool,
     /// Refuse all write requests, making the server read-only. (default: false)
     pub read_only: bool,
-    /// Duplicate all packets sent from the server. (default: 0)
-    pub duplicate_packets: u8,
     /// Overwrite existing files. (default: false)
     pub overwrite: bool,
-    /// Should clean (delete) files after receiving errors. (default: true)
-    pub clean_on_error: bool,
-    /// Max count of retires (default: 6)
-    pub max_retries: usize,
-    /// Block counter roll-over policy  (default: Enforce0)
-    pub rollover: Rollover,
+    /// Local options for server
+    pub opt_local: OptionsPrivate,
 }
 
 impl Default for Config {
@@ -64,13 +55,58 @@ impl Default for Config {
             send_directory: Default::default(),
             single_port: Default::default(),
             read_only: Default::default(),
-            duplicate_packets: Default::default(),
             overwrite: Default::default(),
-            clean_on_error: true,
-            max_retries: DEFAULT_MAX_RETRIES,
-            rollover: DEFAULT_ROLLOVER,
+            opt_local: Default::default(),
         }
     }
+}
+
+pub fn parse_local_args<T: Iterator<Item = String>>(arg: &str, args: &mut T, opt_local: &mut OptionsPrivate) -> Result<bool, Box<dyn Error>> {
+    match arg {
+        "--duplicate-packets" => {
+            if let Some(duplicate_packets_str) = args.next() {
+                let duplicate_packets = duplicate_packets_str.parse::<u8>()?;
+                if duplicate_packets == u8::MAX {
+                    return Err(format!("Duplicate packets should be less than {}", u8::MAX).into());
+                }
+                opt_local.repeat_count = duplicate_packets + 1;
+            } else {
+                return Err("Missing duplicate packets after flag".into());
+            }
+        }
+        "--keep-on-error" => {
+            opt_local.clean_on_error = false;
+        }
+        "-m" | "--maxretries" => {
+            if let Some(retries_str) = args.next() {
+                opt_local.max_retries = retries_str.parse::<usize>()?;
+            } else {
+                return Err("Missing max retries after flag".into());
+            }
+        }
+        "-R" | "--rollover" => {
+            if let Some(arg_str) = args.next() {
+                opt_local.rollover = match arg_str.as_str() {
+                    "n" => Rollover::None,
+                    "0" => Rollover::Enforce0,
+                    "1" => Rollover::Enforce1,
+                    "x" => Rollover::DontCare,
+                    _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
+                }
+            } else {
+                return Err("Rollover policy value missing: use n, 0, 1, x".into())
+            }
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+pub fn print_opt_local_help() {
+    println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
+    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (dont care) (default: 0)");
+    println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
+    println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
 }
 
 impl Config {
@@ -80,6 +116,7 @@ impl Config {
         let mut config = Config::default();
         let mut verbosity : isize = 1;
 
+        // Skip arg 0 (executable name)
         args.next();
 
         while let Some(arg) = args.next() {
@@ -135,13 +172,6 @@ impl Config {
                 "-r" | "--read-only" => {
                     config.read_only = true;
                 }
-                "-m" | "--maxretries" => {
-                    if let Some(retries_str) = args.next() {
-                        config.max_retries = retries_str.parse::<usize>()?;
-                    } else {
-                        return Err("Missing max retries after flag".into());
-                    }
-                }
                 "-h" | "--help" => {
                     println!("TFTP Server Daemon\n");
                     println!("Usage: tftpd [OPTIONS]\n");
@@ -153,54 +183,21 @@ impl Config {
                     println!("  -sd, --send-directory <DIRECTORY>\tSet the directory to send files from (default: the directory setting)");
                     println!("  -s, --single-port\t\t\tUse a single port for both sending and receiving (default: false)");
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
-                    println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
-                    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (dont care) (default: 0)");
-                    println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
-                    println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
+                    print_opt_local_help();
                     println!("  -h, --help\t\t\t\tPrint help information");
                     process::exit(0);
                 }
-                "--duplicate-packets" => {
-                    if let Some(duplicate_packets_str) = args.next() {
-                        let duplicate_packets = duplicate_packets_str.parse::<u8>()?;
-
-                        if duplicate_packets == u8::MAX {
-                            return Err(format!(
-                                "Duplicate packets should be less than {}",
-                                u8::MAX
-                            )
-                            .into());
-                        }
-                        config.duplicate_packets = duplicate_packets;
-                    } else {
-                        return Err("Missing duplicate packets after flag".into());
-                    }
-                }
                 "--overwrite" => {
                     config.overwrite = true;
-                }
-                "--keep-on-error" => {
-                    config.clean_on_error = false;
-                }
-                "-R" | "--rollover" => {
-                    if let Some(arg_str) = args.next() {
-                        match arg_str.as_str() {
-                            "n" => config.rollover = Rollover::None,
-                            "0" => config.rollover = Rollover::Enforce0,
-                            "1" => config.rollover = Rollover::Enforce1,
-                            "x" => config.rollover = Rollover::DontCare,
-                            _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
-                        }
-                    } else {
-                        return Err("Rollover policy value missing: use n, 0, 1, x".into())
-                    }
                 }
                 "-q" | "--quiet" => verbosity -= 1,
                 "-v" | "--verbose" => verbosity += 1,
                 #[cfg(feature = "debug_drop")]
                 "-D" => drop_set(args.next())?,
-                invalid => return Err(format!("Invalid flag: {invalid}").into()),
+                arg => if !parse_local_args(arg, &mut args, &mut config.opt_local)? {
+                    return Err(format!("Invalid flag: {arg}").into());
+                }
             }
         }
 
@@ -252,7 +249,7 @@ mod tests {
         assert_eq!(config.directory, PathBuf::from("/"));
         assert_eq!(config.receive_directory, PathBuf::from("/"));
         assert_eq!(config.send_directory, PathBuf::from("/"));
-        assert!(!config.clean_on_error);
+        assert!(!config.opt_local.clean_on_error);
         assert!(config.single_port);
         assert!(config.read_only);
     }
@@ -367,6 +364,6 @@ mod tests {
     fn initializes_duplicate_packets_as_zero() {
         let config = Config::new(["/"].iter().map(|s| s.to_string())).unwrap();
 
-        assert_eq!(config.duplicate_packets, 0);
+        assert_eq!(config.opt_local.repeat_count, 1);
     }
 }

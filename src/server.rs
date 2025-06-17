@@ -1,5 +1,3 @@
-use crate::{Config, OptionType, ServerSocket, Socket, Worker};
-use crate::{ErrorCode, Packet, TransferOption, OptionFmt, log::*};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::error::Error;
@@ -8,25 +6,12 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-/// Enum used to set the block counter roll-over policy
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum Rollover {
-    /// Rollover forbidden
-    None,
-    /// Enforce 0 in Rx and Tx
-    Enforce0,
-    /// Enforce 1 in Rx and Tx
-    Enforce1,
-    /// Allow both cases in Rx and use value in Tx
-    DontCare,
-}
+use crate::{Config, ErrorCode, Packet};
+use crate::{ServerSocket, Socket, TransferOption, Worker, log::*};
+use crate::options::{DEFAULT_BLOCK_SIZE, OptionsPrivate, OptionsProtocol, OptionFmt};
 
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-pub const DEFAULT_BLOCK_SIZE: usize = 512;
-pub const DEFAULT_WINDOW_SIZE: u16 = 1;
-pub const DEFAULT_WINDOW_WAIT: Duration = Duration::from_millis(0);
-pub const DEFAULT_MAX_RETRIES: usize = 6;
-pub const DEFAULT_ROLLOVER : Rollover = Rollover::Enforce0;
+#[cfg(test)]
+use crate::OptionType;
 
 /// Server `struct` is used for handling incoming TFTP requests.
 ///
@@ -50,12 +35,9 @@ pub struct Server {
     single_port: bool,
     read_only: bool,
     overwrite: bool,
-    clean_on_error: bool,
-    duplicate_packets: u8,
-    largest_block_size: usize,
+    largest_block_size: u16,
     clients: HashMap<SocketAddr, Sender<Packet>>,
-    max_retries: usize,
-    rollover: Rollover,
+    opt_local: OptionsPrivate,
 }
 
 impl Server {
@@ -69,12 +51,9 @@ impl Server {
             single_port: config.single_port,
             read_only: config.read_only,
             overwrite: config.overwrite,
-            clean_on_error: config.clean_on_error,
-            duplicate_packets: config.duplicate_packets,
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
-            max_retries: config.max_retries,
-            rollover: config.rollover,
+            opt_local: config.opt_local.clone(),
         };
 
         Ok(server)
@@ -84,7 +63,7 @@ impl Server {
     pub fn listen(&mut self) {
         loop {
             let received = if self.single_port {
-                self.socket.recv_from_with_size(self.largest_block_size)
+                self.socket.recv_from_with_size(self.largest_block_size as usize)
             } else {
                 Socket::recv_from(&self.socket)
             };
@@ -181,8 +160,7 @@ impl Server {
                 )
             }
             ErrorCode::FileExists => {
-                let worker_options =
-                    parse_options(options, RequestType::Read(file_path.metadata()?.len()))?;
+                let worker_options = OptionsProtocol::parse(options, RequestType::Read(file_path.metadata()?.len()))?;
                 let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
@@ -199,7 +177,7 @@ impl Server {
                 socket.set_read_timeout(worker_options.timeout)?;
                 socket.set_write_timeout(worker_options.timeout)?;
 
-                log_dbg!("Accepted options: {}", OptionFmt(options));
+                log_dbg!("  Accepted options: {}", OptionFmt(options));
 
                 accept_request(
                     &socket,
@@ -210,14 +188,8 @@ impl Server {
                 let worker = Worker::new(
                     socket,
                     file_path.clone(),
-                    self.clean_on_error,
-                    worker_options.block_size,
-                    worker_options.timeout,
-                    worker_options.window_size,
-                    worker_options.window_wait,
-                    self.duplicate_packets + 1,
-                    self.max_retries,
-                    self.rollover,
+                    self.opt_local.clone(),
+                    worker_options.clone(),
                 );
                 worker.send(!options.is_empty())?;
                 Ok(())
@@ -235,7 +207,7 @@ impl Server {
         let file_path = convert_file_path(&filename);
         let file_path = &self.receive_directory.join(file_path);
         let initialize_write = &mut || -> Result<(), Box<dyn Error>> {
-            let worker_options = parse_options(options, RequestType::Write)?;
+            let worker_options = OptionsProtocol::parse(options, RequestType::Write)?;
             let mut socket: Box<dyn Socket>;
 
             if self.single_port {
@@ -251,22 +223,16 @@ impl Server {
             socket.set_read_timeout(worker_options.timeout)?;
             socket.set_write_timeout(worker_options.timeout)?;
 
-            log_dbg!("Accepted options: {}", OptionFmt(options));
+            log_dbg!("  Accepted options: {}", OptionFmt(options));
             accept_request(&socket, options, RequestType::Write)?;
 
             let worker = Worker::new(
                 socket,
                 file_path.clone(),
-                self.clean_on_error,
-                worker_options.block_size,
-                worker_options.timeout,
-                worker_options.window_size,
-                worker_options.window_wait,
-                self.duplicate_packets + 1,
-                self.max_retries,
-                self.rollover,
+                self.opt_local.clone(),
+                worker_options.clone(),
             );
-            worker.receive(worker_options.transfer_size)?;
+            worker.receive()?;
             Ok(())
         };
 
@@ -313,16 +279,7 @@ impl Server {
 }
 
 #[derive(Debug, PartialEq)]
-struct WorkerOptions {
-    block_size: usize,
-    transfer_size: usize,
-    timeout: Duration,
-    window_size: u16,
-    window_wait: Duration,
-}
-
-#[derive(Debug, PartialEq)]
-enum RequestType {
+pub enum RequestType {
     Read(u64),
     Write,
 }
@@ -338,57 +295,6 @@ pub fn convert_file_path(filename: &str) -> PathBuf {
     };
 
     PathBuf::from(normalized_filename)
-}
-
-fn parse_options(
-    options: &mut [TransferOption],
-    request_type: RequestType,
-) -> Result<WorkerOptions, &'static str> {
-    let mut worker_options = WorkerOptions {
-        block_size: DEFAULT_BLOCK_SIZE,
-        transfer_size: 0,
-        timeout: DEFAULT_TIMEOUT,
-        window_size: DEFAULT_WINDOW_SIZE,
-        window_wait: DEFAULT_WINDOW_WAIT,
-    };
-
-    for option in options {
-        let TransferOption {
-            option: option_type,
-            value,
-        } = option;
-
-        match option_type {
-            OptionType::BlockSize => worker_options.block_size = *value,
-            OptionType::TransferSize => match request_type {
-                RequestType::Read(size) => {
-                    *value = size as usize;
-                    worker_options.transfer_size = size as usize;
-                }
-                RequestType::Write => worker_options.transfer_size = *value,
-            },
-            OptionType::Timeout => {
-                if *value == 0 {
-                    return Err("Invalid timeout value");
-                }
-                worker_options.timeout = Duration::from_secs(*value as u64);
-            }
-            OptionType::TimeoutMs => {
-                worker_options.timeout = Duration::from_millis(*value as u64);
-            }
-            OptionType::WindowSize => {
-                if *value == 0 || *value > u16::MAX as usize {
-                    return Err("Invalid windowsize value");
-                }
-                worker_options.window_size = *value as u16;
-            }
-            OptionType::WindowWait => {
-                worker_options.window_wait = Duration::from_millis(*value as u64);
-            }
-        }
-    }
-
-    Ok(worker_options)
 }
 
 fn create_single_socket(
@@ -518,11 +424,11 @@ mod tests {
 
         let work_type = RequestType::Read(12341234);
 
-        let worker_options = parse_options(&mut options, work_type).unwrap();
+        let worker_options = OptionsProtocol::parse(&mut options, work_type).unwrap();
 
-        assert_eq!(options[0].value, worker_options.block_size);
-        assert_eq!(options[1].value, worker_options.transfer_size as usize);
-        assert_eq!(options[2].value as u64, worker_options.timeout.as_secs());
+        assert_eq!(options[0].value, worker_options.block_size as u64);
+        assert_eq!(options[1].value, worker_options.transfer_size.unwrap());
+        assert_eq!(options[2].value, worker_options.timeout.as_secs());
     }
 
     #[test]
@@ -544,24 +450,18 @@ mod tests {
 
         let work_type = RequestType::Write;
 
-        let worker_options = parse_options(&mut options, work_type).unwrap();
+        let worker_options = OptionsProtocol::parse(&mut options, work_type).unwrap();
 
-        assert_eq!(options[0].value, worker_options.block_size);
-        assert_eq!(options[1].value, worker_options.transfer_size as usize);
-        assert_eq!(options[2].value as u64, worker_options.timeout.as_secs());
+        assert_eq!(options[0].value, worker_options.block_size as u64);
+        assert_eq!(options[1].value, worker_options.transfer_size.unwrap());
+        assert_eq!(options[2].value, worker_options.timeout.as_secs());
     }
 
     #[test]
     fn parses_default_options() {
         assert_eq!(
-            parse_options(&mut [], RequestType::Write).unwrap(),
-            WorkerOptions {
-                block_size: DEFAULT_BLOCK_SIZE,
-                transfer_size: 0,
-                timeout: DEFAULT_TIMEOUT,
-                window_size: DEFAULT_WINDOW_SIZE,
-                window_wait: DEFAULT_WINDOW_WAIT,
-            }
+            OptionsProtocol::parse(&mut [], RequestType::Write).unwrap(),
+            OptionsProtocol::default(),
         );
     }
 }
