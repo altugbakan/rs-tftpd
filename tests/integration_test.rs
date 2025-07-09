@@ -25,6 +25,7 @@ impl CommandRunner {
     fn new_piped(program: &str, args: &[&str]) -> Self {
         let command = Command::new(program)
             .args(args)
+            .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .expect("error starting process");
@@ -478,7 +479,7 @@ fn test_rollover_fail() {
 #[test]
 fn test_tsize() {
     let filename = "tsize";
-    let port = "6986";
+    let port = "6988";
     create_folders();
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
@@ -515,7 +516,7 @@ fn test_tsize() {
 #[test]
 fn test_window() {
     let filename = "window";
-    let port = "6988";
+    let port = "6989";
     initialize(format!("{SERVER_DIR}/{filename}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20458", ]);
@@ -547,7 +548,7 @@ fn test_window() {
 #[test]
 fn test_window_timeout() {
     let filename = "window_timeout";
-    let port = "6989";
+    let port = "6990";
     initialize(format!("{SERVER_DIR}/{filename}").as_str());
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20464" ]);
@@ -575,6 +576,46 @@ fn test_window_timeout() {
     check_files(filename);
 }
 
+
+
+// This test checks that sender will not duplicate data packets after a double ack,
+// which is called "sorcerer's apprentice syndrom" (cf RFC 1123).
+#[test]
+fn test_sas() {
+    let filename = "sas";
+    let port = "6991";
+    create_folders();
+    create_file(format!("{CLIENT_DIR}/{filename}").as_str(), 256);
+
+    let _server = CommandRunner::new("target/debug/tftpd", 
+        &["-p", port, "-d", SERVER_DIR, "--overwrite", "-v", "-v" ]);
+    thread::sleep(Duration::from_secs(1));
+
+    // test is executed by dropping different packets wrt their position in the window
+    for drop  in 9..27 {
+        let mut client = CommandRunner::new_piped(
+            "target/debug/tftpc",
+            &[
+                "-u", format!("{CLIENT_DIR}/{filename}").as_str(),
+                "-p", port,
+                "-b", "1",  // speed up test
+                "-t", ".5", // speed up test
+                "-w", "5",
+                "-v", "-v", // Enable mismatch logging
+                "-D", drop.to_string().as_str(), // trigger ack duplication
+            ],
+        );
+
+        let mut stdout = client.process.stdout.take().unwrap();
+        
+        let status = client.wait();   
+        let mut buffer = String::new();
+        let _ = stdout.read_to_string(&mut buffer);
+        assert!(buffer.split("Data packet mismatch").count() < 10);
+        assert!(buffer.split("Ack timeout").count() < 3);
+        assert!(status.success());
+    }
+}
 
 fn initialize(filename: &str) {
     create_folders();

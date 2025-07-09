@@ -146,10 +146,10 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn send_file(mut self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
-        let mut block_seq_win : u16 = 1;
+        let mut block_seq_win : u16 = 0;
         let mut win_idx : u16 = 0;
-        let mut more = true;
         let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
+        let mut more = window.fill()?;
 
         let mut timeout_end = Instant::now();
         let mut retry_cnt = 0;
@@ -160,17 +160,11 @@ impl<T: Socket + ?Sized> Worker<T> {
             self.check_response()?;
         }
 
-        loop {
-            if window.is_empty() {
-                if !more {
-                    return Ok(());
-                }
-                more = window.fill()?;
-                self.socket.set_nonblocking(true)?;
-            }
+        self.socket.set_nonblocking(true)?;
 
+        loop {
             if let Some(frame) = window.get_elements().get(win_idx as usize) {
-                let mut block_seq_tx = block_seq_win.wrapping_add(win_idx);
+                let mut block_seq_tx = block_seq_win.wrapping_add(win_idx + 1);
                 if block_seq_tx < block_seq_win {
                     match self.opt_local.rollover {
                             Rollover::None => return Err(self.send_rollover_error()),
@@ -195,33 +189,15 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
             }
 
+            let mut last_ack : Option<u16> = None;
             loop {
                 match self.socket.recv() {
                     Ok(Packet::Ack(block_seq_rx)) => {
-
-                        let next_seq = block_seq_rx.wrapping_add(1);
-                        let mut diff = next_seq.wrapping_sub(block_seq_win);
-                        if block_seq_rx < block_seq_win && self.opt_local.rollover == Rollover::Enforce1 {
-                            diff = diff.wrapping_sub(1);
+                        if last_ack.is_none() {
+                            self.socket.set_nonblocking(true)?;
                         }
-
-                        if diff <= self.opt_common.window_size {
-                            block_seq_win = next_seq;
-                            if block_seq_win == 0 && self.opt_local.rollover == Rollover::Enforce1 {
-                                block_seq_win = 1;
-                            }
-
-                            window.remove(diff)?;
-                            win_idx = 0;
-                            if diff != self.opt_common.window_size && more {
-                                more = window.fill()?;
-                                self.socket.set_nonblocking(true)?;
-                            }
-                            break;
-                        } else {
-                            log_dbg!("  Received Ack with unexpected seq {block_seq_rx} (instead of {}/{})",
-                                block_seq_win, self.opt_common.window_size);
-                        }
+                        last_ack = Some(block_seq_rx);
+                        continue;
                     }
 
                     Ok(Packet::Error{code, msg}) => return Err(format!("Received error code {code}: {msg}").into()),
@@ -231,16 +207,34 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
-                                /* On non-blocking sockets, Unix returns WouldBlock and Windows TimedOut */
+                                /* On non-blocking sockets, Windows returns WouldBlock and Unix TimedOut */
                                 ErrorKind::WouldBlock |
-                                ErrorKind::TimedOut => if win_idx < window.len() {
-                                    // Non blocking socket
-                                    break;
-                                } else {
-                                    // Blocking socket, so timeout expired
-                                    self.socket.set_nonblocking(true)?;
-                                    win_idx = 0;
-                                },
+                                ErrorKind::TimedOut => {
+                                    if let Some(ack) = last_ack {
+                                        let mut diff = ack.wrapping_sub(block_seq_win);
+                                        if ack < block_seq_win && self.opt_local.rollover == Rollover::Enforce1 {
+                                            diff -= 1;
+                                        }
+
+                                        if diff == 0 {
+                                            break;
+                                        } else if diff <= self.opt_common.window_size {
+                                            block_seq_win = ack;
+                                            window.remove(diff)?;
+                                            if !more && window.is_empty() {
+                                                return Ok(());
+                                            }
+                                            more = more && window.fill()?;
+                                            win_idx = 0;
+                                            break;
+                                        } else {
+                                            log_dbg!("      Received Ack with unexpected seq {ack} (prev {block_seq_win})");
+                                        }
+                                    }
+                                    if win_idx < window.len() {
+                                        break;
+                                    }
+                                }
                                 ErrorKind::ConnectionReset => log_info!("  Cnx reset during reception {io_e:?}"),
                                 _ => log_warn!("  IO error during reception {io_e:?}"),
                             }
@@ -251,12 +245,13 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
 
                 if timeout_end < Instant::now() {
-                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
+                    log_info!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
                     if retry_cnt == self.opt_local.max_retries {
                         return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
                     }
                     retry_cnt += 1;
                     timeout_end = Instant::now() + self.opt_common.timeout;
+                    win_idx = 0;
                     break;
                 }
             }
@@ -273,15 +268,17 @@ impl<T: Socket + ?Sized> Worker<T> {
         "Block counter rollover error".into()
     }
 
-    fn receive_file(self, file: File) -> Result<u64, Box<dyn Error>> {
+    fn receive_file(mut self, file: File) -> Result<u64, Box<dyn Error>> {
         let mut block_number: u16 = 0;
         let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
         let mut retry_cnt = 0;
 
         let mut last = false;
+        let mut listen_all = false;
+        let mut send_ack = false;
 
         while !last {
-            loop {
+            while !send_ack {
                 match self.socket.recv_with_size(self.opt_common.block_size as usize) {
                     Ok(Packet::Data {
                         block_num: received_block_number,
@@ -312,14 +309,14 @@ impl<T: Socket + ?Sized> Worker<T> {
                             block_number = received_block_number;
                             last = data.len() < self.opt_common.block_size as usize;
                             window.add(data)?;
-
-                            if window.is_full() || last {
-                                break;
-                            }
+                            send_ack = window.is_full() || last;
                         } else {
                             log_dbg!("  Data packet mismatch. Received {received_block_number} instead of {new_block_number}.");
-                            break;
+                            send_ack = true;
                         }
+
+                        self.socket.set_nonblocking(true)?;
+                        listen_all = true;
                     }
                     Ok(Packet::Error { code, msg }) => {
                         return Err(format!("Received error '{code}': {msg}").into());
@@ -329,15 +326,24 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
+                                ErrorKind::WouldBlock |
                                 ErrorKind::TimedOut => {
-                                    log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
-                                    if retry_cnt == self.opt_local.max_retries {
-                                        return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
+                                    if listen_all {
+                                        self.socket.set_nonblocking(false)?;
+                                        listen_all = false;
+                                    } else {
+                                        log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
+                                        if retry_cnt == self.opt_local.max_retries {
+                                            return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
+                                        }
+                                        retry_cnt += 1;
+                                        send_ack = true;
                                     }
-                                    retry_cnt += 1;
-                                    break;
-                                },
-                                ErrorKind::ConnectionReset => log_info!("  Cnx reset during reception {io_e:?}"),
+                                }
+                                ErrorKind::ConnectionReset => {
+                                    log_info!("  Cnx reset during reception {io_e:?}");
+                                    self.socket.set_nonblocking(false)?;
+                                }
                                 _ => log_warn!("  IO error during reception {io_e:?}"),
                             }
                         } else {
@@ -349,6 +355,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             window.empty()?;
             self.send_packet(&Packet::Ack(block_number))?;
+            send_ack = false;
         }
 
         // we should wait and listen a bit more as per RFC 1350 section 6
