@@ -164,7 +164,7 @@ impl ClientConfig {
                 #[cfg(feature = "debug_drop")]
                 "-D" => drop_set(args.next())?,
                 "--" => {
-                    while let Some(arg) = args.next() {
+                    for arg in args.by_ref() {
                         if !config.file_path.as_os_str().is_empty() {
                             return Err("too many arguments".into());
                         }
