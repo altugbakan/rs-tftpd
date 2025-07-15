@@ -1,11 +1,10 @@
 use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr};
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 use std::time::Duration;
 
 use crate::client::Mode;
-use crate::server::convert_file_path;
 use crate::config;
 use crate::options::{DEFAULT_TIMEOUT, OptionsProtocol, OptionsPrivate};
 use crate::log::*;
@@ -168,7 +167,7 @@ impl ClientConfig {
                         if !config.file_path.as_os_str().is_empty() {
                             return Err("too many arguments".into());
                         }
-                        config.file_path = convert_file_path(arg.as_str());
+                        config.file_path = convert_file_path_abs(arg.as_str());
                     }
                 }
                 arg => if !config::parse_local_args(arg, &mut args, &mut config.opt_local)? {
@@ -179,7 +178,7 @@ impl ClientConfig {
                     if arg.starts_with('-') {
                         return Err(format!("unkwon flag {arg} (or use '--' to force into filename)").into());
                     }
-                    config.file_path = convert_file_path(arg);
+                    config.file_path = convert_file_path_abs(arg);
                 }
             }
         }
@@ -192,6 +191,16 @@ impl ClientConfig {
 
         Ok(config)
     }
+}
+
+pub fn convert_file_path_abs(filename: &str) -> PathBuf {
+    let normalized_filename = if MAIN_SEPARATOR == '\\' {
+        filename.replace('/', "\\")
+    } else {
+        filename.replace('\\', "/")
+    };
+
+    PathBuf::from(normalized_filename)
 }
 
 #[cfg(test)]
@@ -277,5 +286,34 @@ mod tests {
         path.push("test.file");
 
         assert_eq!(config.file_path, path);
+    }
+
+    #[test]
+    fn converts_file_path_abs() {
+        let path = convert_file_path_abs("test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path_abs("\\test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push(std::path::MAIN_SEPARATOR_STR);
+        correct_path.push("test.file");
+        assert_eq!(path, correct_path);
+
+        let path = convert_file_path_abs("/test.file");
+        let mut correct_path = PathBuf::new();
+        correct_path.push("/test.file");
+        assert_eq!(path, correct_path);
+
+        #[cfg(target_os = "windows")]
+        {
+            let path = convert_file_path_abs("C:\\test.file");
+            let mut correct_path = PathBuf::new();
+            correct_path.push("C:");
+            correct_path.push(std::path::MAIN_SEPARATOR_STR);
+            correct_path.push("test.file");
+            assert_eq!(path, correct_path);
+        }
     }
 }

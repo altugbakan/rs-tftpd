@@ -151,12 +151,8 @@ impl OptionsProtocol {
                 }
                 OptionType::TimeoutMs => {
                     if *value == 0  {
-                        // RFC 2349 requests timeout to be in range 1-255
                         log_warn!("  Invalid timeoutms value 0. Changed to 1.");
                         *value = 1;
-                    } else if 255 < *value {
-                        log_warn!("  Invalid timeoutms value {}. Changed to 255.", *value);
-                        *value = 255;
                     }
                     opt_common.timeout = Duration::from_millis(*value);
                 }
