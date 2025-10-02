@@ -407,7 +407,7 @@ fn test_receive_curl() {
 fn test_rollover() {
     let filename = "rollover";
     let port = "6986";
-    create_dir_all(format!("{SERVER_DIR}").as_str()).expect("error creating server directory");
+    create_dir_all(SERVER_DIR.to_string().as_str()).expect("error creating server directory");
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", ]);
@@ -443,7 +443,7 @@ fn test_rollover() {
 fn test_rollover_fail() {
     let filename = "rollover_fail";
     let port = "6987";
-    create_dir_all(format!("{SERVER_DIR}").as_str()).expect("error creating server directory");
+    create_dir_all(SERVER_DIR.to_string().as_str()).expect("error creating server directory");
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", ]);
