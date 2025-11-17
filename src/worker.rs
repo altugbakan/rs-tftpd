@@ -375,9 +375,20 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         for i in 0..self.opt_local.repeat_count {
             if i > 0 {
-                std::thread::sleep(DEFAULT_DUPLICATE_DELAY);
+                thread::sleep(DEFAULT_DUPLICATE_DELAY);
             }
-            self.socket.send(packet)?;
+            loop {
+                match self.socket.send(packet) {
+                    Ok(_) => break,
+                    Err(e) => if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
+                        if let ErrorKind::WouldBlock | ErrorKind::TimedOut = io_e.kind() {
+                            thread::sleep(DEFAULT_DUPLICATE_DELAY);
+                            continue;
+                        }
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         Ok(())
