@@ -77,6 +77,15 @@ fn parse_duration<T : Iterator<Item = String>>(args : &mut T) -> Result<Duration
     }
 }
 
+fn print_version_exit() {
+    println!("rs-tftp client version {}", env!("CARGO_PKG_VERSION"));
+    #[cfg(debug_assertions)]
+    println!("build time: {}", env!("BUILD_DATE"));
+    #[cfg(debug_assertions)]
+    println!("git head: {}", env!("GIT_HASH"));
+    process::exit(0);
+}
+   
 impl ClientConfig {
     /// Creates a new configuration by parsing the supplied arguments. It is
     /// intended for use with [`env::args()`].
@@ -156,10 +165,12 @@ impl ClientConfig {
                     println!("  -rd, --receive-directory <DIR>\tdirectory to receive files when in Download mode (default: current)");
                     config::print_opt_local_help();
                     println!("  -h, --help\t\t\t\tprint help information");
+                    println!("  -V, --version\t\t\t\tprint version");
                     process::exit(0);
                 }
                 "-q" | "--quiet" => verbosity -= 1,
                 "-v" | "--verbose" => verbosity += 1,
+                "-V" | "--version" => print_version_exit(),
                 #[cfg(feature = "debug_drop")]
                 "-D" => drop_set(args.next())?,
                 "--" => {

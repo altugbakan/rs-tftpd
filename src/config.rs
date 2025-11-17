@@ -109,6 +109,15 @@ pub fn print_opt_local_help() {
     println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
 }
 
+fn print_version_exit() {
+    println!("rs-tftp server version {}", env!("CARGO_PKG_VERSION"));
+    #[cfg(debug_assertions)]
+    println!("build time: {}", env!("BUILD_DATE"));
+    #[cfg(debug_assertions)]
+    println!("git head: {}", env!("GIT_HASH"));
+    process::exit(0);
+}
+
 impl Config {
     /// Creates a new configuration by parsing the supplied arguments. It is
     /// intended for use with [`env::args()`].
@@ -186,6 +195,7 @@ impl Config {
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
                     print_opt_local_help();
                     println!("  -h, --help\t\t\t\tPrint help information");
+                    println!("  -V, --version\t\t\t\tprint version");
                     process::exit(0);
                 }
                 "--overwrite" => {
@@ -193,6 +203,7 @@ impl Config {
                 }
                 "-q" | "--quiet" => verbosity -= 1,
                 "-v" | "--verbose" => verbosity += 1,
+                "-V" | "--version" => print_version_exit(),
                 #[cfg(feature = "debug_drop")]
                 "-D" => drop_set(args.next())?,
                 arg => if !parse_local_args(arg, &mut args, &mut config.opt_local)? {
