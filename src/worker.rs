@@ -154,7 +154,12 @@ impl<T: Socket + ?Sized> Worker<T> {
         let mut timeout_end = Instant::now() + self.opt_common.timeout;
         let mut retry_cnt = 0;
 
-        self.socket.set_read_timeout(self.opt_common.timeout)?;
+        if cfg!(windows) {
+            // On Windows, recv can return up to 15ms before timeout
+            self.socket.set_read_timeout(self.opt_common.timeout + Duration::from_millis(15))?;
+        } else if cfg!(unix) {
+            self.socket.set_read_timeout(self.opt_common.timeout)?;
+        }
 
         if check_response {
             self.check_response()?;
@@ -243,6 +248,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                         }
                     }
                 }
+
                 if timeout_end < Instant::now() {
                     log_info!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
                     if retry_cnt == self.opt_local.max_retries {
