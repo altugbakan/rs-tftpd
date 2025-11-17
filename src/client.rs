@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::{ClientConfig, Packet, Socket, Worker, log::*};
-use crate::options::{OptionsProtocol, OptionsPrivate, OptionFmt};
+use crate::options::{OptionsProtocol, OptionsPrivate};
+#[cfg(debug_assertions)]
+use crate::options::OptionFmt;
 
 /// Client `struct` is used for client sided TFTP requests.
 ///

@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use crate::{Config, ErrorCode, Packet};
 use crate::{ServerSocket, Socket, TransferOption, Worker, log::*};
-use crate::options::{DEFAULT_BLOCK_SIZE, OptionsPrivate, OptionsProtocol, OptionFmt};
+use crate::options::{DEFAULT_BLOCK_SIZE, OptionsPrivate, OptionsProtocol};
+#[cfg(debug_assertions)]
+use crate::options::OptionFmt;
 
 #[cfg(test)]
 use crate::OptionType;

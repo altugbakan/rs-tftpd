@@ -241,7 +241,8 @@ impl TransferOption {
     }
 }
 
-/// Wrapper to print TransferOption slices
+/// Wrapper to print TransferOption slices (warning in release build)
+#[allow(dead_code)]
 pub struct OptionFmt<'a>(pub &'a [TransferOption]);
 impl fmt::Display for OptionFmt<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
