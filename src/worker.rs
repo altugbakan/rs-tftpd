@@ -151,7 +151,7 @@ impl<T: Socket + ?Sized> Worker<T> {
         let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
         let mut more = window.fill()?;
 
-        let mut timeout_end = Instant::now();
+        let mut timeout_end = Instant::now() + self.opt_common.timeout;
         let mut retry_cnt = 0;
 
         self.socket.set_read_timeout(self.opt_common.timeout)?;
@@ -231,7 +231,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                                             log_dbg!("      Received Ack with unexpected seq {ack} (prev {block_seq_win})");
                                         }
                                     }
-                                    if win_idx < window.len() {
+                                    if win_idx < window.len() && Instant::now() < timeout_end {
                                         break;
                                     }
                                 }
@@ -243,7 +243,6 @@ impl<T: Socket + ?Sized> Worker<T> {
                         }
                     }
                 }
-
                 if timeout_end < Instant::now() {
                     log_info!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
                     if retry_cnt == self.opt_local.max_retries {
@@ -252,6 +251,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                     retry_cnt += 1;
                     timeout_end = Instant::now() + self.opt_common.timeout;
                     win_idx = 0;
+                    self.socket.set_nonblocking(true)?;
                     break;
                 }
             }
