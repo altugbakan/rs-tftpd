@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use std::error::Error;
 
 use crate::Packet;
+use crate::log::*;
 
 static TX_DROP: Mutex<Vec<i32>> = Mutex::new(Vec::new());
 
@@ -22,8 +23,9 @@ fn check_seq_num(num: u16) -> bool
 {
     let mut tx_drop = TX_DROP.lock().unwrap();
     if !tx_drop.is_empty() && tx_drop[0] == num as i32 {
+        log_dbg!("Dropping pkt {} as requested", num);
         tx_drop.remove(0);
-         return true;
+        return true;
     }
     false
 }
