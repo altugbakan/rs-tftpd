@@ -21,14 +21,14 @@ mod client;
 #[cfg(feature = "client")]
 mod client_config;
 mod config;
-mod options;
 mod convert;
+mod log;
+mod options;
 mod packet;
 mod server;
 mod socket;
 mod window;
 mod worker;
-mod log;
 
 #[cfg(feature = "debug_drop")]
 mod drop;
@@ -41,8 +41,9 @@ pub use client::Mode;
 pub use client_config::ClientConfig;
 pub use config::Config;
 pub use convert::Convert;
-pub use options::TransferOption;
+pub use log::verbosity;
 pub use options::OptionType;
+pub use options::TransferOption;
 pub use packet::ErrorCode;
 pub use packet::Opcode;
 pub use packet::Packet;
@@ -51,4 +52,3 @@ pub use socket::ServerSocket;
 pub use socket::Socket;
 pub use window::Window;
 pub use worker::Worker;
-pub use log::verbosity;

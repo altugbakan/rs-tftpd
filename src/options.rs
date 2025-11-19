@@ -1,16 +1,16 @@
 use std::error::Error;
-use std::time::Duration;
-use std::str::FromStr;
 use std::fmt;
+use std::str::FromStr;
+use std::time::Duration;
 
-use crate::{server::RequestType, log::*};
+use crate::{log::*, server::RequestType};
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const DEFAULT_BLOCK_SIZE: u16 = 512;
 pub const DEFAULT_WINDOW_SIZE: u16 = 1;
 pub const DEFAULT_WINDOW_WAIT: Duration = Duration::from_millis(0);
 pub const DEFAULT_MAX_RETRIES: usize = 6;
-pub const DEFAULT_ROLLOVER : Rollover = Rollover::Enforce0;
+pub const DEFAULT_ROLLOVER: Rollover = Rollover::Enforce0;
 
 /// Enum used to set the block counter roll-over policy
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -109,7 +109,10 @@ impl OptionsProtocol {
         options
     }
 
-    pub fn parse(options: &mut [TransferOption], request_type: RequestType) -> Result<OptionsProtocol, &'static str> {
+    pub fn parse(
+        options: &mut [TransferOption],
+        request_type: RequestType,
+    ) -> Result<OptionsProtocol, &'static str> {
         let mut opt_common = OptionsProtocol::default();
 
         for option in options {
@@ -120,7 +123,7 @@ impl OptionsProtocol {
 
             match option_type {
                 OptionType::BlockSize => {
-                    if *value == 0  {
+                    if *value == 0 {
                         // RFC 2348 requests block size to be in range 8-65464
                         // but we use 1-65464 as 1 is useful to speed up some tests
                         log_warn!("  Invalid block size 0. Changed to {DEFAULT_BLOCK_SIZE}.");
@@ -139,7 +142,7 @@ impl OptionsProtocol {
                     RequestType::Write => opt_common.transfer_size = Some(*value),
                 },
                 OptionType::Timeout => {
-                    if *value == 0  {
+                    if *value == 0 {
                         // RFC 2349 requests timeout to be in range 1-255
                         log_warn!("  Invalid timeout value 0. Changed to 1.");
                         *value = 1;
@@ -150,14 +153,14 @@ impl OptionsProtocol {
                     opt_common.timeout = Duration::from_secs(*value);
                 }
                 OptionType::TimeoutMs => {
-                    if *value == 0  {
+                    if *value == 0 {
                         log_warn!("  Invalid timeoutms value 0. Changed to 1.");
                         *value = 1;
                     }
                     opt_common.timeout = Duration::from_millis(*value);
                 }
                 OptionType::WindowSize => {
-                    if *value == 0  {
+                    if *value == 0 {
                         // RFC 7440 requests window to be in range 1-65535
                         log_warn!("  Invalid window size 0. Changed to 1.");
                         *value = 1;
@@ -204,7 +207,6 @@ impl Default for OptionsProtocol {
     }
 }
 
-
 /// TransferOption `struct` represents the TFTP transfer options.
 ///
 /// This `struct` has a function implementation for converting [`TransferOption`]s
@@ -247,7 +249,9 @@ pub struct OptionFmt<'a>(pub &'a [TransferOption]);
 impl fmt::Display for OptionFmt<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (i, e) in self.0.iter().enumerate() {
-            if i != 0 { write!(f, ", ")? }
+            if i != 0 {
+                write!(f, ", ")?
+            }
             write!(f, "{}:{}", e.option.as_str(), e.value)?;
         }
         Ok(())

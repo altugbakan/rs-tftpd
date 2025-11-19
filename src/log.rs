@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 static VERBOSITY: OnceLock<usize> = OnceLock::new();
 
 /// Verbosity should be set once at program start.
-pub fn verbosity_set(verbosity : isize) {
+pub fn verbosity_set(verbosity: isize) {
     VERBOSITY.get_or_init(|| max(0, verbosity) as usize);
 }
 
@@ -44,10 +44,12 @@ macro_rules! log_dbg {
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! log_dbg {
-    ($($x:tt)*) => { () }
+    ($($x:tt)*) => {
+        ()
+    };
 }
 
-pub(crate) use log_err;
-pub(crate) use log_warn;
-pub(crate) use log_info;
 pub(crate) use log_dbg;
+pub(crate) use log_err;
+pub(crate) use log_info;
+pub(crate) use log_warn;

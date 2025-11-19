@@ -1,7 +1,7 @@
 use crate::Packet;
 use std::{
-    io::{Error as IoError, ErrorKind},
     error::Error,
+    io::{Error as IoError, ErrorKind},
     net::{SocketAddr, UdpSocket},
     sync::{
         mpsc::{self, Receiver, Sender},
@@ -255,7 +255,7 @@ mod tests {
         let socket = ServerSocket::new(
             UdpSocket::bind("127.0.0.1:0").unwrap(),
             SocketAddr::from_str("127.0.0.1:50000").unwrap(),
-            Duration::from_secs(3)
+            Duration::from_secs(3),
         );
 
         socket.sender.lock().unwrap().send(Packet::Ack(1)).unwrap();

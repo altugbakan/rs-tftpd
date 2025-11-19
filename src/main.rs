@@ -1,5 +1,5 @@
 use std::{env, net::SocketAddr, process};
-use tftpd::{Config, Server, log_err, log_warn};
+use tftpd::{log_err, log_warn, Config, Server};
 
 fn main() {
     server(env::args());
@@ -14,7 +14,8 @@ fn server<T: Iterator<Item = String>>(args: T) {
     let mut server = Server::new(&config).unwrap_or_else(|err| {
         log_err!(
             "Problem creating server on {}:{}: {err}",
-            config.ip_address, config.port
+            config.ip_address,
+            config.port
         );
         process::exit(1)
     });

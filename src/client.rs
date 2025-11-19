@@ -5,10 +5,10 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::{ClientConfig, Packet, Socket, Worker, log::*};
-use crate::options::{OptionsProtocol, OptionsPrivate};
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
+use crate::options::{OptionsPrivate, OptionsProtocol};
+use crate::{log::*, ClientConfig, Packet, Socket, Worker};
 
 /// Client `struct` is used for client sided TFTP requests.
 ///
@@ -60,7 +60,6 @@ impl Client {
 
     /// Run the Client depending on the [`Mode`] the client is in
     pub fn run(&mut self) -> Result<bool, Box<dyn Error>> {
-
         let socket = if self.remote_address.is_ipv4() {
             UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?
         } else {
@@ -75,7 +74,7 @@ impl Client {
         }
     }
 
-    fn upload(&mut self, socket : UdpSocket) -> Result<bool, Box<dyn Error>> {
+    fn upload(&mut self, socket: UdpSocket) -> Result<bool, Box<dyn Error>> {
         if self.mode != Mode::Upload {
             return Err(Box::from("Client mode is set to Download"));
         }
@@ -96,7 +95,7 @@ impl Client {
             &Packet::Wrq {
                 filename,
                 mode: "octet".into(),
-                options : self.opt_common.prepare(),
+                options: self.opt_common.prepare(),
             },
             &self.remote_address,
         )?;
@@ -121,17 +120,19 @@ impl Client {
                     }
 
                     Packet::Error { code, msg } => Err(Box::from(format!(
-                        "Client received error from server: {code}: {msg}"))),
+                        "Client received error from server: {code}: {msg}"
+                    ))),
 
                     _ => Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"))),
+                        "Client received unexpected packet from server: {packet:#?}"
+                    ))),
                 }
             }
-            Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
+            Err(err) => Err(Box::from(format!("Unexpected Error: {err}"))),
         }
     }
 
-    fn download(&mut self, socket : UdpSocket) -> Result<bool, Box<dyn Error>> {
+    fn download(&mut self, socket: UdpSocket) -> Result<bool, Box<dyn Error>> {
         if self.mode != Mode::Download {
             return Err(Box::from("Client mode is set to Upload"));
         }
@@ -149,13 +150,12 @@ impl Client {
             &Packet::Rrq {
                 filename,
                 mode: "octet".into(),
-                options : self.opt_common.prepare(),
+                options: self.opt_common.prepare(),
             },
             &self.remote_address,
         )?;
 
         match Socket::recv_from(&socket) {
-
             Ok((packet, from)) => {
                 socket.connect(from)?;
                 match packet {
@@ -171,16 +171,20 @@ impl Client {
                     // We could implement this by forwarding Option<packet::Data> to worker.receive()
                     Packet::Data { .. } => Err(
                         "Client received data instead of o-ack. This implementation \
-                        does not support servers without options (RFC 2347)".into()),
+                        does not support servers without options (RFC 2347)"
+                            .into(),
+                    ),
 
                     Packet::Error { code, msg } => Err(Box::from(format!(
-                        "Client received error from server: {code}: {msg}"))),
+                        "Client received error from server: {code}: {msg}"
+                    ))),
 
                     _ => Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"))),
+                        "Client received unexpected packet from server: {packet:#?}"
+                    ))),
                 }
             }
-            Err(err) => Err(Box::from(format!("Unexpected Error: {err}")))
+            Err(err) => Err(Box::from(format!("Unexpected Error: {err}"))),
         }
     }
 

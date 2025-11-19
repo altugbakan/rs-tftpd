@@ -1,7 +1,7 @@
-use std::{error::Error, env, net::SocketAddr, process, process::ExitCode};
-use tftpd::{Client, ClientConfig, Mode, log_err, log_info};
+use std::{env, error::Error, net::SocketAddr, process, process::ExitCode};
+use tftpd::{log_err, log_info, Client, ClientConfig, Mode};
 
-fn main() -> ExitCode{
+fn main() -> ExitCode {
     match client(env::args()) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,

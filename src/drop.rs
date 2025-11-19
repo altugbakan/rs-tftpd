@@ -1,12 +1,12 @@
-use std::sync::Mutex;
 use std::error::Error;
+use std::sync::Mutex;
 
-use crate::Packet;
 use crate::log::*;
+use crate::Packet;
 
 static TX_DROP: Mutex<Vec<i32>> = Mutex::new(Vec::new());
 
-pub fn drop_set(opt : Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn drop_set(opt: Option<String>) -> Result<(), Box<dyn Error>> {
     if let Some(arg) = opt {
         let mut tx_drop = TX_DROP.lock().unwrap();
         for val in arg.split(',') {
@@ -19,8 +19,7 @@ pub fn drop_set(opt : Option<String>) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn check_seq_num(num: u16) -> bool
-{
+fn check_seq_num(num: u16) -> bool {
     let mut tx_drop = TX_DROP.lock().unwrap();
     if !tx_drop.is_empty() && tx_drop[0] == num as i32 {
         log_dbg!("Dropping pkt {} as requested", num);
@@ -30,10 +29,9 @@ fn check_seq_num(num: u16) -> bool
     false
 }
 
-pub fn drop_check(packet: &Packet) -> bool
-{
+pub fn drop_check(packet: &Packet) -> bool {
     match packet {
-        Packet::Data{block_num, data: _ } => check_seq_num(*block_num),
+        Packet::Data { block_num, data: _ } => check_seq_num(*block_num),
         Packet::Ack(block_num) => check_seq_num(*block_num),
         _ => false,
     }

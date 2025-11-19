@@ -3,8 +3,8 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::{env, process};
 
-use crate::options::{Rollover, OptionsPrivate};
 use crate::log::*;
+use crate::options::{OptionsPrivate, Rollover};
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_set;
@@ -61,7 +61,11 @@ impl Default for Config {
     }
 }
 
-pub fn parse_local_args<T: Iterator<Item = String>>(arg: &str, args: &mut T, opt_local: &mut OptionsPrivate) -> Result<bool, Box<dyn Error>> {
+pub fn parse_local_args<T: Iterator<Item = String>>(
+    arg: &str,
+    args: &mut T,
+    opt_local: &mut OptionsPrivate,
+) -> Result<bool, Box<dyn Error>> {
     match arg {
         "--duplicate-packets" => {
             if let Some(duplicate_packets_str) = args.next() {
@@ -94,7 +98,7 @@ pub fn parse_local_args<T: Iterator<Item = String>>(arg: &str, args: &mut T, opt
                     _ => return Err("Invalid rollover policy value: use n, 0, 1, x".into()),
                 }
             } else {
-                return Err("Rollover policy value missing: use n, 0, 1, x".into())
+                return Err("Rollover policy value missing: use n, 0, 1, x".into());
             }
         }
         _ => return Ok(false),
@@ -105,7 +109,9 @@ pub fn parse_local_args<T: Iterator<Item = String>>(arg: &str, args: &mut T, opt
 pub fn print_opt_local_help() {
     println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
     println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (dont care) (default: 0)");
-    println!("  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)");
+    println!(
+        "  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)"
+    );
     println!("  --keep-on-error\t\t\tPrevent daemon from deleting files after receiving errors");
 }
 
@@ -123,7 +129,7 @@ impl Config {
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<Config, Box<dyn Error>> {
         let mut config = Config::default();
-        let mut verbosity : isize = 1;
+        let mut verbosity: isize = 1;
 
         // Skip arg 0 (executable name)
         args.next();
@@ -206,8 +212,10 @@ impl Config {
                 "-V" | "--version" => print_version_exit(),
                 #[cfg(feature = "debug_drop")]
                 "-D" => drop_set(args.next())?,
-                arg => if !parse_local_args(arg, &mut args, &mut config.opt_local)? {
-                    return Err(format!("Invalid flag: {arg}").into());
+                arg => {
+                    if !parse_local_args(arg, &mut args, &mut config.opt_local)? {
+                        return Err(format!("Invalid flag: {arg}").into());
+                    }
                 }
             }
         }

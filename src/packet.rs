@@ -1,8 +1,8 @@
 use std::error::Error;
-use std::str::FromStr;
 use std::fmt;
+use std::str::FromStr;
 
-use crate::{Convert, TransferOption, OptionType};
+use crate::{Convert, OptionType, TransferOption};
 
 /// Packet `enum` represents the valid TFTP packet types.
 ///

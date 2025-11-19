@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use crate::{Config, ErrorCode, Packet};
-use crate::{ServerSocket, Socket, TransferOption, Worker, log::*};
-use crate::options::{DEFAULT_BLOCK_SIZE, OptionsPrivate, OptionsProtocol};
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
+use crate::options::{OptionsPrivate, OptionsProtocol, DEFAULT_BLOCK_SIZE};
+use crate::{log::*, ServerSocket, Socket, TransferOption, Worker};
+use crate::{Config, ErrorCode, Packet};
 
 #[cfg(test)]
 use crate::OptionType;
@@ -65,7 +65,8 @@ impl Server {
     pub fn listen(&mut self) {
         loop {
             let received = if self.single_port {
-                self.socket.recv_from_with_size(self.largest_block_size as usize)
+                self.socket
+                    .recv_from_with_size(self.largest_block_size as usize)
             } else {
                 Socket::recv_from(&self.socket)
             };
@@ -162,11 +163,15 @@ impl Server {
                 )
             }
             ErrorCode::FileExists => {
-                let worker_options = OptionsProtocol::parse(options, RequestType::Read(file_path.metadata()?.len()))?;
+                let worker_options = OptionsProtocol::parse(
+                    options,
+                    RequestType::Read(file_path.metadata()?.len()),
+                )?;
                 let mut socket: Box<dyn Socket>;
 
                 if self.single_port {
-                    let single_socket = create_single_socket(&self.socket, to, worker_options.timeout)?;
+                    let single_socket =
+                        create_single_socket(&self.socket, to, worker_options.timeout)?;
                     self.clients.insert(*to, single_socket.sender());
                     self.largest_block_size =
                         max(self.largest_block_size, worker_options.block_size);
@@ -294,7 +299,7 @@ pub fn convert_file_path(filename: &str) -> PathBuf {
     } else {
         filename
     };
-    let formatted_filename = nodrive_filename.trim_start_matches(['/', '\\']).to_string();  
+    let formatted_filename = nodrive_filename.trim_start_matches(['/', '\\']).to_string();
     let normalized_filename = if MAIN_SEPARATOR == '\\' {
         formatted_filename.replace('/', "\\")
     } else {

@@ -1,15 +1,15 @@
 use std::{
     error::Error,
-    io::ErrorKind,
     fs::{self, File},
+    io::ErrorKind,
     path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
 
-use crate::{ErrorCode, Packet, Socket, Window};
-use crate::options::{OptionsPrivate, OptionsProtocol, Rollover};
 use crate::log::*;
+use crate::options::{OptionsPrivate, OptionsProtocol, Rollover};
+use crate::{ErrorCode, Packet, Socket, Window};
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_check;
@@ -54,8 +54,8 @@ impl<T: Socket + ?Sized> Worker<T> {
     pub fn new(
         socket: Box<T>,
         file_path: PathBuf,
-        opt_local : OptionsPrivate,
-        opt_common : OptionsProtocol,
+        opt_local: OptionsPrivate,
+        opt_common: OptionsProtocol,
     ) -> Worker<T> {
         Worker {
             socket,
@@ -108,9 +108,8 @@ impl<T: Socket + ?Sized> Worker<T> {
         let opt_tsize = self.opt_common.transfer_size;
 
         let handle = thread::spawn(move || {
-            let handle_receive = || -> Result<u64, Box<dyn Error>> {
-                self.receive_file(File::create(&file_path)?)
-            };
+            let handle_receive =
+                || -> Result<u64, Box<dyn Error>> { self.receive_file(File::create(&file_path)?) };
 
             match handle_receive() {
                 Ok(size) => {
@@ -124,7 +123,8 @@ impl<T: Socket + ?Sized> Worker<T> {
                     log_info!(
                         "Received {} ({} bytes) from {}",
                         &file_path.file_name().unwrap().to_string_lossy(),
-                        size, remote_addr
+                        size,
+                        remote_addr
                     );
                     true
                 }
@@ -146,9 +146,13 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn send_file(mut self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
-        let mut block_seq_win : u16 = 0;
-        let mut win_idx : u16 = 0;
-        let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
+        let mut block_seq_win: u16 = 0;
+        let mut win_idx: u16 = 0;
+        let mut window = Window::new(
+            self.opt_common.window_size,
+            self.opt_common.block_size,
+            file,
+        );
         let mut more = window.fill()?;
 
         let mut timeout_end = Instant::now() + self.opt_common.timeout;
@@ -156,7 +160,8 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         if cfg!(windows) {
             // On Windows, recv can return up to 15ms before timeout
-            self.socket.set_read_timeout(self.opt_common.timeout + Duration::from_millis(15))?;
+            self.socket
+                .set_read_timeout(self.opt_common.timeout + Duration::from_millis(15))?;
         } else if cfg!(unix) {
             self.socket.set_read_timeout(self.opt_common.timeout)?;
         }
@@ -172,9 +177,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                 let mut block_seq_tx = block_seq_win.wrapping_add(win_idx + 1);
                 if block_seq_tx < block_seq_win {
                     match self.opt_local.rollover {
-                            Rollover::None => return Err(self.send_rollover_error()),
-                            Rollover::Enforce0 | Rollover::DontCare=> (),
-                            Rollover::Enforce1 => block_seq_tx += 1,
+                        Rollover::None => return Err(self.send_rollover_error()),
+                        Rollover::Enforce0 | Rollover::DontCare => (),
+                        Rollover::Enforce1 => block_seq_tx += 1,
                     }
                 }
 
@@ -194,7 +199,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
             }
 
-            let mut last_ack : Option<u16> = None;
+            let mut last_ack: Option<u16> = None;
             loop {
                 match self.socket.recv() {
                     Ok(Packet::Ack(block_seq_rx)) => {
@@ -205,7 +210,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                         continue;
                     }
 
-                    Ok(Packet::Error{code, msg}) => return Err(format!("Received error code {code}: {msg}").into()),
+                    Ok(Packet::Error { code, msg }) => {
+                        return Err(format!("Received error code {code}: {msg}").into())
+                    }
 
                     Ok(_) => log_info!("  Received unexpected packet"),
 
@@ -213,11 +220,12 @@ impl<T: Socket + ?Sized> Worker<T> {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
                                 /* On non-blocking sockets, Windows returns WouldBlock and Unix TimedOut */
-                                ErrorKind::WouldBlock |
-                                ErrorKind::TimedOut => {
+                                ErrorKind::WouldBlock | ErrorKind::TimedOut => {
                                     if let Some(ack) = last_ack {
                                         let mut diff = ack.wrapping_sub(block_seq_win);
-                                        if ack < block_seq_win && self.opt_local.rollover == Rollover::Enforce1 {
+                                        if ack < block_seq_win
+                                            && self.opt_local.rollover == Rollover::Enforce1
+                                        {
                                             diff -= 1;
                                         }
 
@@ -240,7 +248,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                                         break;
                                     }
                                 }
-                                ErrorKind::ConnectionReset => log_info!("  Cnx reset during reception {io_e:?}"),
+                                ErrorKind::ConnectionReset => {
+                                    log_info!("  Cnx reset during reception {io_e:?}")
+                                }
                                 _ => log_warn!("  IO error during reception {io_e:?}"),
                             }
                         } else {
@@ -252,7 +262,11 @@ impl<T: Socket + ?Sized> Worker<T> {
                 if timeout_end < Instant::now() {
                     log_info!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
                     if retry_cnt == self.opt_local.max_retries {
-                        return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
+                        return Err(format!(
+                            "Transfer timed out after {} tries",
+                            self.opt_local.max_retries
+                        )
+                        .into());
                     }
                     retry_cnt += 1;
                     timeout_end = Instant::now() + self.opt_common.timeout;
@@ -268,7 +282,8 @@ impl<T: Socket + ?Sized> Worker<T> {
         self.send_packet(&Packet::Error {
             code: ErrorCode::IllegalOperation,
             msg: "Block counter rollover error".to_string(),
-        }).unwrap_or_else(|err| {
+        })
+        .unwrap_or_else(|err| {
             log_err!("Error: error '{err:?}' while sending error code");
         });
         "Block counter rollover error".into()
@@ -276,7 +291,11 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     fn receive_file(mut self, file: File) -> Result<u64, Box<dyn Error>> {
         let mut block_number: u16 = 0;
-        let mut window = Window::new(self.opt_common.window_size, self.opt_common.block_size, file);
+        let mut window = Window::new(
+            self.opt_common.window_size,
+            self.opt_common.block_size,
+            file,
+        );
         let mut retry_cnt = 0;
 
         let mut last = false;
@@ -285,7 +304,10 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         while !last {
             while !send_ack {
-                match self.socket.recv_with_size(self.opt_common.block_size as usize) {
+                match self
+                    .socket
+                    .recv_with_size(self.opt_common.block_size as usize)
+                {
                     Ok(Packet::Data {
                         block_num: received_block_number,
                         data,
@@ -294,19 +316,23 @@ impl<T: Socket + ?Sized> Worker<T> {
                         if new_block_number == 0 {
                             match self.opt_local.rollover {
                                 Rollover::None => return Err(self.send_rollover_error()),
-                                Rollover::Enforce0 => if received_block_number == 1 {
-                                    log_warn!("  Warning: data packet 0 missed. Possible rollover policy mismatch.");
-                                },
+                                Rollover::Enforce0 => {
+                                    if received_block_number == 1 {
+                                        log_warn!("  Warning: data packet 0 missed. Possible rollover policy mismatch.");
+                                    }
+                                }
                                 Rollover::Enforce1 => {
                                     new_block_number = 1;
                                     if received_block_number == 0 {
                                         return Err(self.send_rollover_error());
                                     }
                                 }
-                                Rollover::DontCare => if received_block_number == 1 {
-                                    // Possible data loss if previous packet was 0 and lost
-                                    log_dbg!("  Data packet 0 missed. Possible data loss.");
-                                    new_block_number = 1;
+                                Rollover::DontCare => {
+                                    if received_block_number == 1 {
+                                        // Possible data loss if previous packet was 0 and lost
+                                        log_dbg!("  Data packet 0 missed. Possible data loss.");
+                                        new_block_number = 1;
+                                    }
                                 }
                             }
                         }
@@ -332,15 +358,22 @@ impl<T: Socket + ?Sized> Worker<T> {
                     Err(e) => {
                         if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
                             match io_e.kind() {
-                                ErrorKind::WouldBlock |
-                                ErrorKind::TimedOut => {
+                                ErrorKind::WouldBlock | ErrorKind::TimedOut => {
                                     if listen_all {
                                         self.socket.set_nonblocking(false)?;
                                         listen_all = false;
                                     } else {
-                                        log_dbg!("  Ack timeout {}/{}", retry_cnt, self.opt_local.max_retries);
+                                        log_dbg!(
+                                            "  Ack timeout {}/{}",
+                                            retry_cnt,
+                                            self.opt_local.max_retries
+                                        );
                                         if retry_cnt == self.opt_local.max_retries {
-                                            return Err(format!("Transfer timed out after {} tries", self.opt_local.max_retries).into());
+                                            return Err(format!(
+                                                "Transfer timed out after {} tries",
+                                                self.opt_local.max_retries
+                                            )
+                                            .into());
                                         }
                                         retry_cnt += 1;
                                         send_ack = true;
@@ -371,7 +404,9 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     fn send_packet(&self, packet: &Packet) -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "debug_drop")]
-        if drop_check(packet) { return Ok(()) };
+        if drop_check(packet) {
+            return Ok(());
+        };
 
         for i in 0..self.opt_local.repeat_count {
             if i > 0 {
@@ -380,12 +415,14 @@ impl<T: Socket + ?Sized> Worker<T> {
             loop {
                 match self.socket.send(packet) {
                     Ok(_) => break,
-                    Err(e) => if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
-                        if let ErrorKind::WouldBlock | ErrorKind::TimedOut = io_e.kind() {
-                            thread::sleep(DEFAULT_DUPLICATE_DELAY);
-                            continue;
+                    Err(e) => {
+                        if let Some(io_e) = e.downcast_ref::<std::io::Error>() {
+                            if let ErrorKind::WouldBlock | ErrorKind::TimedOut = io_e.kind() {
+                                thread::sleep(DEFAULT_DUPLICATE_DELAY);
+                                continue;
+                            }
+                            return Err(e);
                         }
-                        return Err(e);
                     }
                 }
             }

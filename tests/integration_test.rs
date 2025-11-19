@@ -1,10 +1,10 @@
 #![cfg(feature = "integration")]
 
 use std::fs::{self, create_dir_all, remove_dir_all};
+use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
-use std::io::Read;
 
 const SERVER_DIR: &str = "target/integration/server";
 const CLIENT_DIR: &str = "target/integration/client";
@@ -291,7 +291,10 @@ fn test_client_receive_paths() {
     let port = "6982";
     create_dir_all(format!("{SERVER_DIR}/subdir").as_str())
         .expect("error creating server directory");
-    create_file(format!("{SERVER_DIR}/subdir/{filename}").as_str(), 10*1024*1024);
+    create_file(
+        format!("{SERVER_DIR}/subdir/{filename}").as_str(),
+        10 * 1024 * 1024,
+    );
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
     thread::sleep(Duration::from_secs(1));
@@ -326,7 +329,10 @@ fn test_client_receive_windows_paths() {
     let port = "6983";
     create_dir_all(format!("{SERVER_DIR}/windir").as_str())
         .expect("error creating server directory");
-    create_file(format!("{SERVER_DIR}/windir/{filename}").as_str(), 10*1024*1024);
+    create_file(
+        format!("{SERVER_DIR}/windir/{filename}").as_str(),
+        10 * 1024 * 1024,
+    );
 
     let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR]);
     thread::sleep(Duration::from_secs(1));
@@ -362,16 +368,24 @@ fn test_send_curl() {
     initialize(format!("{SERVER_DIR}/{filename}").as_str());
 
     // rollover=0, verbosity max, drop 1 data packet at half transfer
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", "-D", "32768"]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &[
+            "-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", "-D", "32768",
+        ],
+    );
     thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "curl",
         &[
             "-O", //use remote filename locally
-            "--output-dir", CLIENT_DIR,
+            "--output-dir",
+            CLIENT_DIR,
             format!("tftp://127.0.0.1:{port}/{filename}").as_str(),
-            "--tftp-blksize", "150", // blocksize to ensure 1 rollover
-            "--connect-timeout", "3", // timeout = 1s
+            "--tftp-blksize",
+            "150", // blocksize to ensure 1 rollover
+            "--connect-timeout",
+            "3", // timeout = 1s
         ],
     );
 
@@ -386,7 +400,12 @@ fn test_receive_curl() {
     initialize(format!("{CLIENT_DIR}/{filename}").as_str());
 
     // rollover=0, verbosity max, drop 1 data packet at half transfer
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", "-D", "32768"]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &[
+            "-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", "-D", "32768",
+        ],
+    );
     thread::sleep(Duration::from_secs(1));
     let mut client = CommandRunner::new(
         "curl",
@@ -394,8 +413,10 @@ fn test_receive_curl() {
             "--upload-file",
             format!("{CLIENT_DIR}/{filename}").as_str(),
             format!("tftp://127.0.0.1:{port}/").as_str(),
-            "--tftp-blksize", "150", // blocksize to ensure 1 rollover
-            "--connect-timeout", "3", // timeout = 1s
+            "--tftp-blksize",
+            "150", // blocksize to ensure 1 rollover
+            "--connect-timeout",
+            "3", // timeout = 1s
         ],
     );
 
@@ -410,20 +431,19 @@ fn test_rollover() {
     create_dir_all(SERVER_DIR.to_string().as_str()).expect("error creating server directory");
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v"],
+    );
     thread::sleep(Duration::from_secs(1));
 
     let mut client = CommandRunner::new(
         "target/debug/tftpc",
         &[
-            filename,
-            "-p", port,
-            "-d",
-            "-rd", CLIENT_DIR,
-            "-R", "0",
-            "-b", "1", // speed up test and ensure rollover
-            "-w", "32", // speed up test 
-            "-v", "-v", 
+            filename, "-p", port, "-d", "-rd", CLIENT_DIR, "-R", "0", "-b",
+            "1", // speed up test and ensure rollover
+            "-w", "32", // speed up test
+            "-v", "-v",
         ],
     );
 
@@ -446,17 +466,17 @@ fn test_rollover_fail() {
     create_dir_all(SERVER_DIR.to_string().as_str()).expect("error creating server directory");
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v", ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-p", port, "-d", SERVER_DIR, "-R", "0", "-v", "-v"],
+    );
     thread::sleep(Duration::from_secs(1));
 
     let mut client = CommandRunner::new_piped(
         "target/debug/tftpc",
         &[
-            filename,
-            "-p", port,
-            "-d",
-            "-rd", CLIENT_DIR,
-            "-R", "1", // different from server, must fail
+            filename, "-p", port, "-d", "-rd", CLIENT_DIR, "-R",
+            "1", // different from server, must fail
             "-b", "1", // speed up test and ensure rollover
             "-w", "32", // speed up test
             "-v", "-v",
@@ -465,11 +485,11 @@ fn test_rollover_fail() {
 
     let mut stderr = client.process.stderr.take().unwrap();
     let status = client.wait();
-    
+
     let mut buffer = String::new();
     let _ = stderr.read_to_string(&mut buffer);
     assert!(buffer.contains("Block counter rollover error"));
-    
+
     assert!(!status.success());
 }
 
@@ -483,22 +503,21 @@ fn test_tsize() {
     create_folders();
     create_file(format!("{SERVER_DIR}/{filename}").as_str(), 65540);
 
-    let _server = CommandRunner::new("target/debug/tftpd", 
-        &["-p", port, "-d", SERVER_DIR,
-            "-R", "0", "-D", "0", // rollover 0 but drop data 0!
-             "-v", "-v", 
-        ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &[
+            "-p", port, "-d", SERVER_DIR, "-R", "0", "-D", "0", // rollover 0 but drop data 0!
+            "-v", "-v",
+        ],
+    );
     thread::sleep(Duration::from_secs(1));
 
     let mut client = CommandRunner::new_piped(
         "target/debug/tftpc",
         &[
-            filename,
-            "-p", port,
-            "-d",
-            "-rd", CLIENT_DIR,
-            "-R", "x",  // will not fail if data 0 is missing
-            "-b", "1",  // speed up test and ensure rollover
+            filename, "-p", port, "-d", "-rd", CLIENT_DIR, "-R",
+            "x", // will not fail if data 0 is missing
+            "-b", "1", // speed up test and ensure rollover
             "-w", "30", // to ensure no ack on data 0
             "-v", "-v",
         ],
@@ -506,7 +525,7 @@ fn test_tsize() {
 
     let mut stderr = client.process.stderr.take().unwrap();
     let status = client.wait();
-    
+
     let mut buffer = String::new();
     let _ = stderr.read_to_string(&mut buffer);
     assert!(buffer.contains("Size mismatch"));
@@ -519,19 +538,17 @@ fn test_window() {
     let port = "6989";
     initialize(format!("{SERVER_DIR}/{filename}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20458", ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20458"],
+    );
     thread::sleep(Duration::from_secs(1));
 
     let now = Instant::now();
     let mut client = CommandRunner::new(
         "target/debug/tftpc",
         &[
-            "-d", 
-            filename, 
-            "-p", port, 
-            "-rd", CLIENT_DIR,
-            "-w", "8",
-            "-t", "10",
+            "-d", filename, "-p", port, "-rd", CLIENT_DIR, "-w", "8", "-t", "10",
         ],
     );
 
@@ -540,10 +557,9 @@ fn test_window() {
 
     // Packet drop at window start should not trigger any timeout
     assert!(now.elapsed() < Duration::from_secs(10));
-     
+
     check_files(filename);
 }
-
 
 #[test]
 fn test_window_timeout() {
@@ -551,19 +567,17 @@ fn test_window_timeout() {
     let port = "6990";
     initialize(format!("{SERVER_DIR}/{filename}").as_str());
 
-    let _server = CommandRunner::new("target/debug/tftpd", &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20464" ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-p", port, "-d", SERVER_DIR, "-v", "-v", "-D", "20464"],
+    );
     thread::sleep(Duration::from_secs(1));
 
     let now = Instant::now();
     let mut client = CommandRunner::new(
         "target/debug/tftpc",
         &[
-            "-d", 
-            filename, 
-            "-p", port, 
-            "-rd", CLIENT_DIR,
-            "-w", "8",
-            "-t", "6",
+            "-d", filename, "-p", port, "-rd", CLIENT_DIR, "-w", "8", "-t", "6",
         ],
     );
 
@@ -576,8 +590,6 @@ fn test_window_timeout() {
     check_files(filename);
 }
 
-
-
 // This test checks that sender will not duplicate data packets after a double ack,
 // which is called "sorcerer's apprentice syndrom" (cf RFC 1123).
 #[test]
@@ -587,28 +599,37 @@ fn test_sas() {
     create_folders();
     create_file(format!("{CLIENT_DIR}/{filename}").as_str(), 256);
 
-    let _server = CommandRunner::new("target/debug/tftpd", 
-        &["-p", port, "-d", SERVER_DIR, "--overwrite", "-v", "-v" ]);
+    let _server = CommandRunner::new(
+        "target/debug/tftpd",
+        &["-p", port, "-d", SERVER_DIR, "--overwrite", "-v", "-v"],
+    );
     thread::sleep(Duration::from_secs(1));
 
     // test is executed by dropping different packets wrt their position in the window
-    for drop  in 9..27 {
+    for drop in 9..27 {
         let mut client = CommandRunner::new_piped(
             "target/debug/tftpc",
             &[
-                "-u", format!("{CLIENT_DIR}/{filename}").as_str(),
-                "-p", port,
-                "-b", "1",  // speed up test
-                "-t", ".5", // speed up test
-                "-w", "5",
-                "-v", "-v", // Enable mismatch logging
-                "-D", drop.to_string().as_str(), // trigger ack duplication
+                "-u",
+                format!("{CLIENT_DIR}/{filename}").as_str(),
+                "-p",
+                port,
+                "-b",
+                "1", // speed up test
+                "-t",
+                ".5", // speed up test
+                "-w",
+                "5",
+                "-v",
+                "-v", // Enable mismatch logging
+                "-D",
+                drop.to_string().as_str(), // trigger ack duplication
             ],
         );
 
         let mut stdout = client.process.stdout.take().unwrap();
-        
-        let status = client.wait();   
+
+        let status = client.wait();
         let mut buffer = String::new();
         let _ = stdout.read_to_string(&mut buffer);
         assert!(buffer.split("Data packet mismatch").count() < 10);
@@ -619,7 +640,7 @@ fn test_sas() {
 
 fn initialize(filename: &str) {
     create_folders();
-    create_file(filename, 10*1024*1024);
+    create_file(filename, 10 * 1024 * 1024);
 }
 
 fn create_folders() {

@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use crate::client::Mode;
 use crate::config;
-use crate::options::{DEFAULT_TIMEOUT, OptionsProtocol, OptionsPrivate};
 use crate::log::*;
+use crate::options::{OptionsPrivate, OptionsProtocol, DEFAULT_TIMEOUT};
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_set;
@@ -62,7 +62,7 @@ impl Default for ClientConfig {
     }
 }
 
-fn parse_duration<T : Iterator<Item = String>>(args : &mut T) -> Result<Duration, Box<dyn Error>> {
+fn parse_duration<T: Iterator<Item = String>>(args: &mut T) -> Result<Duration, Box<dyn Error>> {
     if let Some(dur_str) = args.next() {
         let dur = Duration::from_secs_f32(dur_str.parse::<f32>()?);
         if dur < Duration::from_secs_f32(0.001) {
@@ -85,13 +85,13 @@ fn print_version_exit() {
     println!("git head: {}", env!("GIT_HASH"));
     process::exit(0);
 }
-   
+
 impl ClientConfig {
     /// Creates a new configuration by parsing the supplied arguments. It is
     /// intended for use with [`env::args()`].
     pub fn new<T: Iterator<Item = String>>(mut args: T) -> Result<ClientConfig, Box<dyn Error>> {
         let mut config = ClientConfig::default();
-        let mut verbosity : isize = 1;
+        let mut verbosity: isize = 1;
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -181,15 +181,20 @@ impl ClientConfig {
                         config.file_path = convert_file_path_abs(arg.as_str());
                     }
                 }
-                arg => if !config::parse_local_args(arg, &mut args, &mut config.opt_local)? {
-                    if !config.file_path.as_os_str().is_empty() {
-                        return Err("too many arguments".into());
-                    }
+                arg => {
+                    if !config::parse_local_args(arg, &mut args, &mut config.opt_local)? {
+                        if !config.file_path.as_os_str().is_empty() {
+                            return Err("too many arguments".into());
+                        }
 
-                    if arg.starts_with('-') {
-                        return Err(format!("unkwon flag {arg} (or use '--' to force into filename)").into());
+                        if arg.starts_with('-') {
+                            return Err(format!(
+                                "unkwon flag {arg} (or use '--' to force into filename)"
+                            )
+                            .into());
+                        }
+                        config.file_path = convert_file_path_abs(arg);
                     }
-                    config.file_path = convert_file_path_abs(arg);
                 }
             }
         }
@@ -275,8 +280,7 @@ mod tests {
 
     #[test]
     fn parses_file_paths() {
-        let config =
-            ClientConfig::new(["test/test.file"].iter().map(|s| s.to_string())).unwrap();
+        let config = ClientConfig::new(["test/test.file"].iter().map(|s| s.to_string())).unwrap();
 
         let mut path = PathBuf::new();
         path.push("test");
@@ -284,12 +288,8 @@ mod tests {
 
         assert_eq!(config.file_path, path);
 
-        let config = ClientConfig::new(
-            ["test\\test\\test.file"]
-                .iter()
-                .map(|s| s.to_string()),
-        )
-        .unwrap();
+        let config =
+            ClientConfig::new(["test\\test\\test.file"].iter().map(|s| s.to_string())).unwrap();
 
         let mut path = PathBuf::new();
         path.push("test");
