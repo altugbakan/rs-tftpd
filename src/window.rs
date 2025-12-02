@@ -2,42 +2,45 @@ use std::{
     collections::VecDeque,
     error::Error,
     fs::File,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
 };
 
-/// Window `struct` is used to store chunks of data from a file. It is
-/// used to help store the data that is being sent or received for the
+/// WindowRead `struct` is used to store chunks of data from a file. It is
+/// used to help store the data that is being sent for the
 /// [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize option.
 ///
 /// # Example
 /// ```rust
 /// use std::{fs::{self, OpenOptions, File}, io::Write};
-/// use tftpd::Window;
+/// use tftpd::WindowRead;
 ///
 /// let mut file = File::create("test.txt").unwrap();
 /// file.write_all(b"Hello, world!").unwrap();
 /// file.flush().unwrap();
 ///
 /// let file = File::open("test.txt").unwrap();
-/// let mut window = Window::new(5, 512, file);
+/// let mut window = WindowRead::new(5, 512, file);
 /// window.fill().unwrap();
 /// fs::remove_file("test.txt").unwrap();
 /// ```
-pub struct Window {
+pub struct WindowRead {
     elements: VecDeque<Vec<u8>>,
     size: u16,
     chunk_size: u16,
-    file: File,
+    bufreader: BufReader<File>,
 }
 
-impl Window {
+impl WindowRead {
     /// Creates a new `Window` with the supplied size and chunk size.
-    pub fn new(size: u16, chunk_size: u16, file: File) -> Window {
-        Window {
+    pub fn new(size: u16, chunk_size: u16, file: File) -> WindowRead {
+        WindowRead {
             elements: VecDeque::new(),
             size,
             chunk_size,
-            file,
+            bufreader: BufReader::with_capacity(
+                2 * size as usize*chunk_size as usize,
+                file,
+            ),
         }
     }
 
@@ -46,8 +49,7 @@ impl Window {
     pub fn fill(&mut self) -> Result<bool, Box<dyn Error>> {
         for _ in self.len()..self.size {
             let mut chunk = vec![0; self.chunk_size as usize];
-            let size = self.file.read(&mut chunk)?;
-
+            let size = self.bufreader.read(&mut chunk)?;
             if size != self.chunk_size as usize {
                 chunk.truncate(size);
                 self.elements.push_back(chunk);
@@ -60,14 +62,9 @@ impl Window {
         Ok(true)
     }
 
-    /// Empties the `Window` by writing the data to the file.
-    pub fn empty(&mut self) -> Result<(), Box<dyn Error>> {
-        for data in &self.elements {
-            self.file.write_all(data)?;
-        }
-
-        self.elements.clear();
-
+    /// Fill the read buffer to speed up next window fill
+    pub fn prefill(&mut self) -> Result<(), Box<dyn Error>> {
+        self.bufreader.fill_buf()?;
         Ok(())
     }
 
@@ -82,6 +79,65 @@ impl Window {
         Ok(())
     }
 
+    /// Returns a reference to the `VecDeque` containing the elements.
+    pub fn get_elements(&self) -> &VecDeque<Vec<u8>> {
+        &self.elements
+    }
+
+    /// Returns the length of the `Window`.
+    pub fn len(&self) -> u16 {
+        self.elements.len() as u16
+    }
+
+    /// Returns `true` if the `Window` is empty.
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
+    }
+}
+
+
+/// WindowWrite `struct` is used to store data and write them in a file. 
+/// It is used to help store the data that is being received for the
+/// [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize option.
+///
+/// # Example
+/// ```rust
+/// use std::{fs::{self, OpenOptions, File}, io::Write};
+/// use tftpd::WindowWrite;
+///
+/// let file = File::create("test.txt").unwrap();
+/// let mut window = WindowWrite::new(5, file);
+/// window.add(vec![0x1, 0x2, 0x3]).unwrap();
+/// window.add(vec![0x4, 0x5, 0x6]).unwrap();
+/// window.empty().unwrap();
+/// ```
+pub struct WindowWrite {
+    elements: VecDeque<Vec<u8>>,
+    size: u16,
+    file: File,
+}
+
+impl WindowWrite {
+    /// Creates a new `Window` with the supplied size and chunk size.
+    pub fn new(size: u16, file: File) -> WindowWrite {
+        WindowWrite {
+            elements: VecDeque::new(),
+            size,
+            file,
+        }
+    }
+
+    /// Empties the `Window` by writing the data to the file.
+    pub fn empty(&mut self) -> Result<(), Box<dyn Error>> {
+        for data in &self.elements {
+            self.file.write_all(data)?;
+        }
+
+        self.elements.clear();
+
+        Ok(())
+    }
+
     /// Adds a data `Vec<u8>` to the `Window`.
     pub fn add(&mut self, data: Vec<u8>) -> Result<(), &'static str> {
         if self.len() == self.size {
@@ -91,11 +147,6 @@ impl Window {
         self.elements.push_back(data);
 
         Ok(())
-    }
-
-    /// Returns a reference to the `VecDeque` containing the elements.
-    pub fn get_elements(&self) -> &VecDeque<Vec<u8>> {
-        &self.elements
     }
 
     /// Returns the length of the `Window`.
@@ -140,7 +191,7 @@ mod tests {
 
         file = open(FILENAME);
 
-        let mut window = Window::new(2, 5, file);
+        let mut window = WindowRead::new(2, 5, file);
         window.fill().unwrap();
         assert_eq!(window.elements.len(), 2);
         assert_eq!(window.elements[0], b"Hello"[..]);
@@ -164,7 +215,7 @@ mod tests {
 
         let file = initialize(FILENAME);
 
-        let mut window = Window::new(3, 5, file);
+        let mut window = WindowWrite::new(3, file);
         window.add(b"Hello".to_vec()).unwrap();
         assert_eq!(window.elements.len(), 1);
         assert_eq!(window.elements[0], b"Hello"[..]);

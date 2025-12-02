@@ -9,7 +9,7 @@ use std::{
 
 use crate::log::*;
 use crate::options::{OptionsPrivate, OptionsProtocol, Rollover};
-use crate::{ErrorCode, Packet, Socket, Window};
+use crate::{ErrorCode, Packet, Socket, WindowRead, WindowWrite};
 
 #[cfg(feature = "debug_drop")]
 use crate::drop::drop_check;
@@ -148,7 +148,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     fn send_file(mut self, file: File, check_response: bool) -> Result<(), Box<dyn Error>> {
         let mut block_seq_win: u16 = 0;
         let mut win_idx: u16 = 0;
-        let mut window = Window::new(
+        let mut window = WindowRead::new(
             self.opt_common.window_size,
             self.opt_common.block_size,
             file,
@@ -194,6 +194,7 @@ impl<T: Socket + ?Sized> Worker<T> {
                         thread::sleep(self.opt_common.window_wait);
                     }
                 } else {
+                    window.prefill()?;
                     self.socket.set_nonblocking(false)?;
                     timeout_end = Instant::now() + self.opt_common.timeout;
                 }
@@ -291,9 +292,8 @@ impl<T: Socket + ?Sized> Worker<T> {
 
     fn receive_file(mut self, file: File) -> Result<u64, Box<dyn Error>> {
         let mut block_number: u16 = 0;
-        let mut window = Window::new(
+        let mut window = WindowWrite::new(
             self.opt_common.window_size,
-            self.opt_common.block_size,
             file,
         );
         let mut retry_cnt = 0;
@@ -392,9 +392,10 @@ impl<T: Socket + ?Sized> Worker<T> {
                 }
             }
 
-            window.empty()?;
             self.send_packet(&Packet::Ack(block_number))?;
             send_ack = false;
+
+            window.empty()?;
         }
 
         // we should wait and listen a bit more as per RFC 1350 section 6
