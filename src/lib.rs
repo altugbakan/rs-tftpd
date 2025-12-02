@@ -50,5 +50,6 @@ pub use packet::Packet;
 pub use server::Server;
 pub use socket::ServerSocket;
 pub use socket::Socket;
-pub use window::Window;
+pub use window::WindowRead;
+pub use window::WindowWrite;
 pub use worker::Worker;
