@@ -105,6 +105,8 @@ impl Client {
                 socket.connect(from)?;
                 match packet {
                     Packet::Oack(options) => {
+                        // Reset options before applying those from server
+                        self.opt_common = Default::default();
                         self.opt_common.apply(&options)?;
                         log_dbg!("  Accepted options: {}", OptionFmt(&options));
                         let worker = self.configure_worker(socket)?;
