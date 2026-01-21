@@ -29,7 +29,8 @@ pub struct Client {
     remote_address: SocketAddr,
     timeout_req: Duration,
     mode: Mode,
-    file_path: PathBuf,
+    file_local: PathBuf,
+    file_remote: String,
     receive_directory: PathBuf,
     opt_local: OptionsPrivate,
     opt_common: OptionsProtocol,
@@ -51,7 +52,8 @@ impl Client {
             remote_address: SocketAddr::from((config.remote_ip_address, config.port)),
             timeout_req: config.timeout_req,
             mode: config.mode,
-            file_path: config.file_path.clone(),
+            file_local: config.file_path.clone(),
+            file_remote: config.file_remote.clone(),
             receive_directory: config.receive_directory.clone(),
             opt_local: config.opt_local.clone(),
             opt_common: config.opt_common.clone(),
@@ -79,21 +81,23 @@ impl Client {
             return Err(Box::from("Client mode is set to Download"));
         }
 
-        let filename = self
-            .file_path
-            .file_name()
-            .ok_or("Invalid filename")?
-            .to_str()
-            .ok_or("Filename is not valid UTF-8")?
-            .to_owned();
+        if self.file_remote.is_empty() {
+            // 1 path provided: use filename as remote
+            self.file_remote = self
+                .file_local
+                .file_name()
+                .ok_or("Invalid filename")?
+                .display()
+                .to_string();
+        }
 
-        self.opt_common.transfer_size = Some(fs::metadata(self.file_path.clone())?.len());
+        self.opt_common.transfer_size = Some(fs::metadata(self.file_local.clone())?.len());
 
-        log_dbg!("  Sending Write request");
+        log_dbg!("  Sending Write request for {}", self.file_remote);
         Socket::send_to(
             &socket,
             &Packet::Wrq {
-                filename,
+                filename : self.file_remote.clone(),
                 mode: "octet".into(),
                 options: self.opt_common.prepare(),
             },
@@ -109,26 +113,25 @@ impl Client {
                         self.opt_common = Default::default();
                         self.opt_common.apply(&options)?;
                         log_dbg!("  Accepted options: {}", OptionFmt(&options));
-                        let worker = self.configure_worker(socket)?;
-                        let join_handle = worker.send(false)?;
-                        Ok(join_handle.join().unwrap())
                     }
 
                     Packet::Ack(_) => {
                         self.opt_common = Default::default();
-                        let worker = self.configure_worker(socket)?;
-                        let join_handle = worker.send(false)?;
-                        Ok(join_handle.join().unwrap())
+                        log_dbg!("  Options not accepted, using default");
                     }
 
-                    Packet::Error { code, msg } => Err(Box::from(format!(
+                    Packet::Error { code, msg } => return Err(Box::from(format!(
                         "Client received error from server: {code}: {msg}"
                     ))),
 
-                    _ => Err(Box::from(format!(
+                    _ => return Err(Box::from(format!(
                         "Client received unexpected packet from server: {packet:#?}"
                     ))),
                 }
+
+                let worker = self.configure_worker(socket)?;
+                let join_handle = worker.send(false)?;
+                Ok(join_handle.join().unwrap())
             }
             Err(err) => Err(Box::from(format!("Unexpected Error: {err}"))),
         }
@@ -139,18 +142,26 @@ impl Client {
             return Err(Box::from("Client mode is set to Upload"));
         }
 
-        let filename = self
-            .file_path
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap_or_else(|_| "Invalid filename".to_string());
+        if self.file_remote.is_empty() {
+            // 1 path provided: use it as remote and use rxdir + filename as local
+            self.file_remote = self
+                .file_local
+                .display()
+                .to_string();
+            self.file_local = self.receive_directory.join(self
+                .file_local
+                .file_name()
+                .ok_or("Invalid filename")?)
+        } else {
+            // 2 paths provided: prefix the local one with rxdir and use remote as is
+            self.file_local = self.receive_directory.join(self.file_local.clone());
+        }
 
-        log_dbg!("  Sending Read request");
+        log_dbg!("  Sending Read request for {}", self.file_remote);
         Socket::send_to(
             &socket,
             &Packet::Rrq {
-                filename,
+                filename : self.file_remote.clone(),
                 mode: "octet".into(),
                 options: self.opt_common.prepare(),
             },
@@ -196,29 +207,11 @@ impl Client {
         socket.set_read_timeout(self.opt_common.timeout)?;
         socket.set_write_timeout(self.opt_common.timeout)?;
 
-        let worker = if self.mode == Mode::Download {
-            let mut file = self.receive_directory.clone();
-            file = file.join(
-                self.file_path
-                    .clone()
-                    .file_name()
-                    .ok_or("Invalid filename")?,
-            );
-            Worker::new(
-                socket,
-                file,
-                self.opt_local.clone(),
-                self.opt_common.clone(),
-            )
-        } else {
-            Worker::new(
-                socket,
-                self.file_path.clone(),
-                self.opt_local.clone(),
-                self.opt_common.clone(),
-            )
-        };
-
-        Ok(worker)
+        Ok(Worker::new(
+            socket,
+            self.file_local.clone(),
+            self.opt_local.clone(),
+            self.opt_common.clone(),
+        ))
     }
 }

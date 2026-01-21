@@ -41,6 +41,8 @@ pub struct ClientConfig {
     pub receive_directory: PathBuf,
     /// File to Upload or Download.
     pub file_path: PathBuf,
+    /// Optional file path to send to server.
+    pub file_remote: String,
     /// Local options for client
     pub opt_local: OptionsPrivate,
     /// Common options for client
@@ -56,6 +58,7 @@ impl Default for ClientConfig {
             mode: Mode::Download,
             receive_directory: Default::default(),
             file_path: Default::default(),
+            file_remote: Default::default(),
             opt_local: Default::default(),
             opt_common: Default::default(),
         }
@@ -151,7 +154,7 @@ impl ClientConfig {
                 }
                 "-h" | "--help" => {
                     println!("TFTP Client\n");
-                    println!("Usage: tftpd client <File> [OPTIONS]\n");
+                    println!("Usage: tftpd client [options] <file> [remote file] \n");
                     println!("Options:");
                     println!("  -i, --ip-address <IP ADDRESS>\t\tIP address of the server (default: 127.0.0.1)");
                     println!("  -p, --port <PORT>\t\t\tUDP port of the server (default: 69)");
@@ -175,25 +178,18 @@ impl ClientConfig {
                 "-D" => drop_set(args.next())?,
                 "--" => {
                     for arg in args.by_ref() {
-                        if !config.file_path.as_os_str().is_empty() {
-                            return Err("too many arguments".into());
-                        }
-                        config.file_path = convert_file_path_abs(arg.as_str());
+                        config.set_paths(&arg)?;
                     }
                 }
                 arg => {
                     if !config::parse_local_args(arg, &mut args, &mut config.opt_local)? {
-                        if !config.file_path.as_os_str().is_empty() {
-                            return Err("too many arguments".into());
-                        }
-
                         if arg.starts_with('-') {
                             return Err(format!(
                                 "unkwon flag {arg} (or use '--' to force into filename)"
                             )
                             .into());
                         }
-                        config.file_path = convert_file_path_abs(arg);
+                        config.set_paths(arg)?;
                     }
                 }
             }
@@ -207,7 +203,19 @@ impl ClientConfig {
 
         Ok(config)
     }
+
+    fn set_paths(&mut self, arg: &str) -> Result<(), Box<dyn Error>> {
+        if self.file_path.as_os_str().is_empty() {
+            self.file_path = convert_file_path_abs(arg);
+        } else if self.file_remote.is_empty() {
+            self.file_remote = arg.to_string();
+        } else {
+            return Err("too many arguments".into());
+        }
+        Ok(())
+    }
 }
+
 
 pub fn convert_file_path_abs(filename: &str) -> PathBuf {
     let normalized_filename = if MAIN_SEPARATOR == '\\' {
