@@ -87,8 +87,9 @@ impl Client {
                 .file_local
                 .file_name()
                 .ok_or("Invalid filename")?
-                .display()
-                .to_string();
+                .to_str()
+                .ok_or("Filename is not valid UTF-8")?
+                .to_owned();
         }
 
         self.opt_common.transfer_size = Some(fs::metadata(self.file_local.clone())?.len());
