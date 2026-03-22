@@ -202,6 +202,8 @@ impl Config {
                     print_opt_local_help();
                     println!("  -h, --help\t\t\t\tPrint help information");
                     println!("  -V, --version\t\t\t\tprint version");
+                    println!("  -v, --verbose\t\t\t\tincrease verbosity");
+                    println!("  -q, --quiet\t\t\t\tdecrease verbosity");
                     process::exit(0);
                 }
                 "--overwrite" => {
