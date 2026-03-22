@@ -108,7 +108,7 @@ pub fn parse_local_args<T: Iterator<Item = String>>(
 
 pub fn print_opt_local_help() {
     println!("  -m, --maxretries <cnt>\t\tSets the max retries count (default: 6)");
-    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (dont care) (default: 0)");
+    println!("  -R, --rollover <policy>\t\tsets the rollover policy: 0, 1, n (forbidden), x (don't care) (default: 0)");
     println!(
         "  --duplicate-packets <NUM>\t\tDuplicate all packets sent from the server (default: 0)"
     );
@@ -200,6 +200,8 @@ impl Config {
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
                     print_opt_local_help();
+                    println!("  -v, --verbose\t\t\t\tIncrease log verbosity (can be repeated, e.g. -vv)");
+                    println!("  -q, --quiet\t\t\t\tDecrease log verbosity (can be repeated)");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     println!("  -V, --version\t\t\t\tprint version");
                     process::exit(0);
