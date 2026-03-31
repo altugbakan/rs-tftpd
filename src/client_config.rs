@@ -167,6 +167,8 @@ impl ClientConfig {
                     println!("  -d, --download\t\t\tselect download mode, ignores previous flags");
                     println!("  -rd, --receive-directory <DIR>\tdirectory to receive files when in Download mode (default: current)");
                     config::print_opt_local_help();
+                    println!("  -v, --verbose\t\t\t\tIncrease log verbosity (can be repeated, e.g. -vv)");
+                    println!("  -q, --quiet\t\t\t\tDecrease log verbosity (can be repeated)");
                     println!("  -h, --help\t\t\t\tprint help information");
                     println!("  -V, --version\t\t\t\tprint version");
                     process::exit(0);
