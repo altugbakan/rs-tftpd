@@ -94,15 +94,15 @@ impl OptionsProtocol {
             });
         }
 
-        options.push(if self.timeout.subsec_millis() == 0 {
+        options.push(if self.timeout.subsec_micros() == 0 {
             TransferOption {
                 option: OptionType::Timeout,
                 value: self.timeout.as_secs(),
             }
         } else {
             TransferOption {
-                option: OptionType::TimeoutMs,
-                value: self.timeout.as_millis() as u64,
+                option: OptionType::UTimeout,
+                value: self.timeout.as_micros() as u64,
             }
         });
 
@@ -152,12 +152,12 @@ impl OptionsProtocol {
                     }
                     opt_common.timeout = Duration::from_secs(*value);
                 }
-                OptionType::TimeoutMs => {
+                OptionType::UTimeout => {
                     if *value == 0 {
-                        log_warn!("  Invalid timeoutms value 0. Changed to 1.");
+                        log_warn!("  Invalid utimeout value 0. Changed to 1.");
                         *value = 1;
                     }
-                    opt_common.timeout = Duration::from_millis(*value);
+                    opt_common.timeout = Duration::from_micros(*value);
                 }
                 OptionType::WindowSize => {
                     if *value == 0 {
@@ -186,7 +186,7 @@ impl OptionsProtocol {
                 OptionType::WindowSize => self.window_size = option.value as u16,
                 OptionType::WindowWait => self.window_wait = Duration::from_millis(option.value),
                 OptionType::Timeout => self.timeout = Duration::from_secs(option.value),
-                OptionType::TimeoutMs => self.timeout = Duration::from_millis(option.value),
+                OptionType::UTimeout => self.timeout = Duration::from_micros(option.value),
                 OptionType::TransferSize => self.transfer_size = Some(option.value),
             }
         }
@@ -279,8 +279,8 @@ pub enum OptionType {
     TransferSize,
     /// Timeout option type
     Timeout,
-    /// Timeout in ms option type
-    TimeoutMs,
+    /// Timeout in us (micro-s) option type
+    UTimeout,
     /// Windowsize option type
     WindowSize,
     /// Windowwait option type
@@ -294,7 +294,7 @@ impl OptionType {
             OptionType::BlockSize => "blksize",
             OptionType::TransferSize => "tsize",
             OptionType::Timeout => "timeout",
-            OptionType::TimeoutMs => "timeoutms",
+            OptionType::UTimeout => "utimeout",
             OptionType::WindowSize => "windowsize",
             OptionType::WindowWait => "windowwait",
         }
@@ -310,7 +310,7 @@ impl FromStr for OptionType {
             "blksize" => Ok(OptionType::BlockSize),
             "tsize" => Ok(OptionType::TransferSize),
             "timeout" => Ok(OptionType::Timeout),
-            "timeoutms" => Ok(OptionType::TimeoutMs),
+            "utimeout" => Ok(OptionType::UTimeout),
             "windowsize" => Ok(OptionType::WindowSize),
             "windowwait" => Ok(OptionType::WindowWait),
             _ => Err("Invalid option type"),
