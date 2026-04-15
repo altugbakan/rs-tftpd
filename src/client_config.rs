@@ -68,8 +68,8 @@ impl Default for ClientConfig {
 fn parse_duration<T: Iterator<Item = String>>(args: &mut T) -> Result<Duration, Box<dyn Error>> {
     if let Some(dur_str) = args.next() {
         let dur = Duration::from_secs_f32(dur_str.parse::<f32>()?);
-        if dur < Duration::from_secs_f32(0.001) {
-            Err("duration cannot be shorter than 1 ms".into())
+        if dur < Duration::from_secs_f32(0.000001) {
+            Err("duration cannot be shorter than 1 us".into())
         } else if dur > Duration::from_secs(255) {
             Err("duration cannot be greater than 255 s".into())
         } else {
