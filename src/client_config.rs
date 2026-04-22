@@ -160,7 +160,7 @@ impl ClientConfig {
                     println!("  -p, --port <PORT>\t\t\tUDP port of the server (default: 69)");
                     println!("  -b, --blocksize <number>\t\tset the blocksize (default: 512)");
                     println!("  -w, --windowsize <number>\t\tset the windowsize (default: 1)");
-                    println!("  -W, --windowwait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0.01)");
+                    println!("  -W, --windowwait <seconds>\t\t inter-packet wait time in seconds for windows (default: 0)");
                     println!("  -t, --timeout <seconds>\t\tset the timeout for data in seconds (default: 5, can be float)");
                     println!("  -T, --timeout-req <seconds>\t\tset the timeout after request in seconds (default: 5, can be float)");
                     println!("  -u, --upload\t\t\t\tselect upload mode, ignores previous flags");
@@ -199,6 +199,14 @@ impl ClientConfig {
 
         if config.file_path.as_os_str().is_empty() {
             return Err("missing filename".into());
+        }
+
+        if config.opt_common.timeout <= config.opt_common.window_wait {
+            return Err("Inter-packet wait time cannot be exceed timeout".into());
+        }
+
+        if !config.opt_common.window_wait.is_zero() && config.opt_common.window_size == 1 {
+            return Err("Inter-packet wait time needs window size > 1".into());
         }
 
         verbosity_set(verbosity);

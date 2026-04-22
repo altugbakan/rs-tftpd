@@ -15,6 +15,7 @@ use crate::{ErrorCode, Packet, Socket, WindowRead, WindowWrite};
 use crate::drop::drop_check;
 
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
+const MAX_ERROR_PACKET_SIZE: usize = 128;
 
 /// Worker `struct` is used for multithreaded file sending and receiving.
 /// It creates a new socket using the Server's IP and a random port
@@ -196,8 +197,9 @@ impl<T: Socket + ?Sized> Worker<T> {
                 } else {
                     window.prefill()?;
                     self.socket.set_nonblocking(false)?;
-                    timeout_end = Instant::now() + self.opt_common.timeout;
                 }
+
+                timeout_end = Instant::now() + self.opt_common.timeout;
             }
 
             let mut last_ack: Option<u16> = None;
@@ -291,6 +293,7 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn receive_file(mut self, file: File) -> Result<u64, Box<dyn Error>> {
+        let max_pkt_size : usize = std::cmp::max(MAX_ERROR_PACKET_SIZE, self.opt_common.block_size as usize);
         let mut block_number: u16 = 0;
         let mut window = WindowWrite::new(
             self.opt_common.window_size,
@@ -306,7 +309,7 @@ impl<T: Socket + ?Sized> Worker<T> {
             while !send_ack {
                 match self
                     .socket
-                    .recv_with_size(self.opt_common.block_size as usize)
+                    .recv_with_size(max_pkt_size)
                 {
                     Ok(Packet::Data {
                         block_num: received_block_number,
