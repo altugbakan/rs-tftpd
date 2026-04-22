@@ -62,7 +62,7 @@ pub struct OptionsProtocol {
     pub block_size: u16,
     /// Windowsize to use during transfer. (default: 1)
     pub window_size: u16,
-    /// Inter packets wait delay in windows (default: 10ms)
+    /// Inter packets wait delay in windows (default: 0)
     pub window_wait: Duration,
     /// Timeout to use during transfer. (default: 5s)
     pub timeout: Duration,
