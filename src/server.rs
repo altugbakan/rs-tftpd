@@ -5,6 +5,8 @@ use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use std::sync::{atomic::AtomicBool, Arc};
+
 
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
@@ -40,6 +42,7 @@ pub struct Server {
     largest_block_size: u16,
     clients: HashMap<SocketAddr, Sender<Packet>>,
     opt_local: OptionsPrivate,
+    abort: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -56,6 +59,7 @@ impl Server {
             largest_block_size: DEFAULT_BLOCK_SIZE,
             clients: HashMap::new(),
             opt_local: config.opt_local.clone(),
+            abort: Arc::new(AtomicBool::new(false)),
         };
 
         Ok(server)
@@ -63,6 +67,9 @@ impl Server {
 
     /// Starts listening for connections. Note that this function does not finish running until termination.
     pub fn listen(&mut self) {
+        // To check abort flag every seconds
+        self.socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+
         loop {
             let received = if self.single_port {
                 self.socket
@@ -127,6 +134,11 @@ impl Server {
                         }
                     }
                 };
+            }
+
+            if self.abort.load(std::sync::atomic::Ordering::Relaxed) {
+                log_err!("TFTP service aborted by user");
+                break;
             }
         }
     }
@@ -197,6 +209,7 @@ impl Server {
                     file_path.clone(),
                     self.opt_local.clone(),
                     worker_options.clone(),
+                    self.abort.clone(),
                 );
                 worker.send(!options.is_empty())?;
                 Ok(())
@@ -238,6 +251,7 @@ impl Server {
                 file_path.clone(),
                 self.opt_local.clone(),
                 worker_options.clone(),
+                self.abort.clone(),
             );
             worker.receive()?;
             Ok(())
@@ -282,6 +296,11 @@ impl Server {
         } else {
             Err("No client found for packet".into())
         }
+    }
+
+    /// Retrieve a ref to the abort flag
+    pub fn get_abort_flag(&self) -> Arc<AtomicBool> {
+        self.abort.clone()
     }
 }
 

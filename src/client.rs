@@ -4,6 +4,7 @@ use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::time::Duration;
+use std::sync::{ atomic::AtomicBool, Arc };
 
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
@@ -34,6 +35,7 @@ pub struct Client {
     receive_directory: PathBuf,
     opt_local: OptionsPrivate,
     opt_common: OptionsProtocol,
+    abort: Arc<AtomicBool>,
 }
 
 /// Enum used to set the client either in Download Mode or Upload Mode
@@ -57,6 +59,7 @@ impl Client {
             receive_directory: config.receive_directory.clone(),
             opt_local: config.opt_local.clone(),
             opt_common: config.opt_common.clone(),
+            abort: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -215,6 +218,12 @@ impl Client {
             self.file_local.clone(),
             self.opt_local.clone(),
             self.opt_common.clone(),
+            self.abort.clone(),
         ))
+    }
+
+    /// Retrieve a ref to the abort flag 
+    pub fn get_abort_flag(&self) -> Arc<AtomicBool> {
+            self.abort.clone()
     }
 }

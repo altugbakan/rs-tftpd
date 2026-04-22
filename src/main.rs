@@ -35,5 +35,8 @@ fn server<T: Iterator<Item = String>>(args: T) {
         );
     }
 
+    #[cfg(feature = "sigint")]
+    signal_hook::flag::register(signal_hook::consts::SIGINT, server.get_abort_flag()).unwrap();
+
     server.listen();
 }
