@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
     thread,
     time::{Duration, Instant},
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use crate::log::*;
@@ -39,6 +40,7 @@ const MAX_ERROR_PACKET_SIZE: usize = 128;
 ///     PathBuf::from_str("Cargo.toml").unwrap(),
 ///     Default::default(),
 ///     Default::default(),
+///     Default::default(),
 /// );
 ///
 /// worker.send(has_options).unwrap();
@@ -48,6 +50,7 @@ pub struct Worker<T: Socket + ?Sized> {
     file_path: PathBuf,
     opt_local: OptionsPrivate,
     opt_common: OptionsProtocol,
+    abort: Arc<AtomicBool>,
 }
 
 impl<T: Socket + ?Sized> Worker<T> {
@@ -57,12 +60,14 @@ impl<T: Socket + ?Sized> Worker<T> {
         file_path: PathBuf,
         opt_local: OptionsPrivate,
         opt_common: OptionsProtocol,
+        abort: Arc<AtomicBool>,
     ) -> Worker<T> {
         Worker {
             socket,
             file_path,
             opt_local,
             opt_common,
+            abort,
         }
     }
 
@@ -204,6 +209,8 @@ impl<T: Socket + ?Sized> Worker<T> {
 
             let mut last_ack: Option<u16> = None;
             loop {
+                self.check_abort()?;
+
                 match self.socket.recv() {
                     Ok(Packet::Ack(block_seq_rx)) => {
                         if last_ack.is_none() {
@@ -393,6 +400,8 @@ impl<T: Socket + ?Sized> Worker<T> {
                         }
                     }
                 }
+
+                self.check_abort()?;
             }
 
             self.send_packet(&Packet::Ack(block_number))?;
@@ -449,5 +458,18 @@ impl<T: Socket + ?Sized> Worker<T> {
         })?;
 
         Err(format!("Unexpected packet received instead of Ack(0): {pkt:#?}").into())
+    }
+
+    fn check_abort(&self) -> Result<(), Box<dyn Error>> {
+        if self.abort.load(std::sync::atomic::Ordering::Relaxed) {
+            self.socket.send(&Packet::Error {
+                code: ErrorCode::NotDefined,
+                msg: "Transfert aborted by user".to_string(),
+            })?;
+
+            Err("Transfert aborted by user".into())
+        } else {
+            Ok(())
+        }
     }
 }
