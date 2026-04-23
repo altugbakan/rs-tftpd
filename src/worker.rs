@@ -3,9 +3,9 @@ use std::{
     fs::{self, File},
     io::ErrorKind,
     path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
     thread,
     time::{Duration, Instant},
-    sync::{atomic::AtomicBool, Arc},
 };
 
 use crate::log::*;
@@ -16,6 +16,7 @@ use crate::{ErrorCode, Packet, Socket, WindowRead, WindowWrite};
 use crate::drop::drop_check;
 
 const DEFAULT_DUPLICATE_DELAY: Duration = Duration::from_millis(1);
+// Chosen arbitrarily because not specified in RFC
 const MAX_ERROR_PACKET_SIZE: usize = 128;
 
 /// Worker `struct` is used for multithreaded file sending and receiving.
@@ -300,12 +301,11 @@ impl<T: Socket + ?Sized> Worker<T> {
     }
 
     fn receive_file(mut self, file: File) -> Result<u64, Box<dyn Error>> {
-        let max_pkt_size : usize = std::cmp::max(MAX_ERROR_PACKET_SIZE, self.opt_common.block_size as usize);
+        // rx socket size for data and error packets
+        let max_pkt_size: usize =
+            std::cmp::max(MAX_ERROR_PACKET_SIZE, self.opt_common.block_size as usize);
         let mut block_number: u16 = 0;
-        let mut window = WindowWrite::new(
-            self.opt_common.window_size,
-            file,
-        );
+        let mut window = WindowWrite::new(self.opt_common.window_size, file);
         let mut retry_cnt = 0;
 
         let mut last = false;
@@ -314,10 +314,7 @@ impl<T: Socket + ?Sized> Worker<T> {
 
         while !last {
             while !send_ack {
-                match self
-                    .socket
-                    .recv_with_size(max_pkt_size)
-                {
+                match self.socket.recv_with_size(max_pkt_size) {
                     Ok(Packet::Data {
                         block_num: received_block_number,
                         data,
