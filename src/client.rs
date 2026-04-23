@@ -3,8 +3,8 @@ use std::error::Error;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
-use std::sync::{ atomic::AtomicBool, Arc };
 
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
@@ -101,7 +101,7 @@ impl Client {
         Socket::send_to(
             &socket,
             &Packet::Wrq {
-                filename : self.file_remote.clone(),
+                filename: self.file_remote.clone(),
                 mode: "octet".into(),
                 options: self.opt_common.prepare(),
             },
@@ -124,13 +124,17 @@ impl Client {
                         log_dbg!("  Options not accepted, using default");
                     }
 
-                    Packet::Error { code, msg } => return Err(Box::from(format!(
-                        "Client received error from server: {code}: {msg}"
-                    ))),
+                    Packet::Error { code, msg } => {
+                        return Err(Box::from(format!(
+                            "Client received error from server: {code}: {msg}"
+                        )))
+                    }
 
-                    _ => return Err(Box::from(format!(
-                        "Client received unexpected packet from server: {packet:#?}"
-                    ))),
+                    _ => {
+                        return Err(Box::from(format!(
+                            "Client received unexpected packet from server: {packet:#?}"
+                        )))
+                    }
                 }
 
                 let worker = self.configure_worker(socket)?;
@@ -148,14 +152,10 @@ impl Client {
 
         if self.file_remote.is_empty() {
             // 1 path provided: use it as remote and use rxdir + filename as local
-            self.file_remote = self
-                .file_local
-                .display()
-                .to_string();
-            self.file_local = self.receive_directory.join(self
-                .file_local
-                .file_name()
-                .ok_or("Invalid filename")?)
+            self.file_remote = self.file_local.display().to_string();
+            self.file_local = self
+                .receive_directory
+                .join(self.file_local.file_name().ok_or("Invalid filename")?)
         } else {
             // 2 paths provided: prefix the local one with rxdir and use remote as is
             self.file_local = self.receive_directory.join(self.file_local.clone());
@@ -165,7 +165,7 @@ impl Client {
         Socket::send_to(
             &socket,
             &Packet::Rrq {
-                filename : self.file_remote.clone(),
+                filename: self.file_remote.clone(),
                 mode: "octet".into(),
                 options: self.opt_common.prepare(),
             },
@@ -222,8 +222,8 @@ impl Client {
         ))
     }
 
-    /// Retrieve a ref to the abort flag 
+    /// Retrieve a ref to the abort flag
     pub fn get_abort_flag(&self) -> Arc<AtomicBool> {
-            self.abort.clone()
+        self.abort.clone()
     }
 }

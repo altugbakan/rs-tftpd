@@ -4,9 +4,8 @@ use std::error::Error;
 use std::net::{SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::sync::mpsc::Sender;
-use std::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
-
+use std::time::Duration;
 
 #[cfg(debug_assertions)]
 use crate::options::OptionFmt;
@@ -68,7 +67,9 @@ impl Server {
     /// Starts listening for connections. Note that this function does not finish running until termination.
     pub fn listen(&mut self) {
         // To check abort flag every seconds
-        self.socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        self.socket
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
 
         loop {
             let received = if self.single_port {

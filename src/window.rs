@@ -37,10 +37,7 @@ impl WindowRead {
             elements: VecDeque::new(),
             size,
             chunk_size,
-            bufreader: BufReader::with_capacity(
-                2 * size as usize*chunk_size as usize,
-                file,
-            ),
+            bufreader: BufReader::with_capacity(2 * size as usize * chunk_size as usize, file),
         }
     }
 
@@ -95,8 +92,7 @@ impl WindowRead {
     }
 }
 
-
-/// WindowWrite `struct` is used to store data and write them in a file. 
+/// WindowWrite `struct` is used to store data and write them in a file.
 /// It is used to help store the data that is being received for the
 /// [RFC 7440](https://www.rfc-editor.org/rfc/rfc7440) Windowsize option.
 ///

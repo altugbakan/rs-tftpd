@@ -200,7 +200,9 @@ impl Config {
                     println!("  -r, --read-only\t\t\tRefuse all write requests, making the server read-only (default: false)");
                     println!("  --overwrite\t\t\t\tOverwrite existing files (default: false)");
                     print_opt_local_help();
-                    println!("  -v, --verbose\t\t\t\tIncrease log verbosity (can be repeated, e.g. -vv)");
+                    println!(
+                        "  -v, --verbose\t\t\t\tIncrease log verbosity (can be repeated, e.g. -vv)"
+                    );
                     println!("  -q, --quiet\t\t\t\tDecrease log verbosity (can be repeated)");
                     println!("  -h, --help\t\t\t\tPrint help information");
                     println!("  -V, --version\t\t\t\tprint version");
