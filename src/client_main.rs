@@ -38,7 +38,7 @@ fn client<T: Iterator<Item = String>>(args: T) -> Result<bool, Box<dyn Error>> {
         );
     }
 
-    #[cfg(feature = "sigint")]
+    // Catch Ctrl-C to exit cleanly by sending error msg
     signal_hook::flag::register(signal_hook::consts::SIGINT, client.get_abort_flag()).unwrap();
 
     client.run()

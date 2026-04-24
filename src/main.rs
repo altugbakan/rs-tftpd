@@ -35,7 +35,7 @@ fn server<T: Iterator<Item = String>>(args: T) {
         );
     }
 
-    #[cfg(feature = "sigint")]
+    // Catch Ctrl-C to exit cleanly by sending error msg to active cnx
     signal_hook::flag::register(signal_hook::consts::SIGINT, server.get_abort_flag()).unwrap();
 
     server.listen();
