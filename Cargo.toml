@@ -22,8 +22,7 @@ path = "src/main.rs"
 client = []
 integration = ["debug_drop", "client"]
 debug_drop = []
-sigint = [ "dep:signal-hook" ]
 
 [dependencies]
-signal-hook = { version = ">=0.3.0", optional = true }
+signal-hook = { version = ">=0.3.0" }
 
